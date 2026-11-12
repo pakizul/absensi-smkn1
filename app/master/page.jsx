@@ -5,10 +5,29 @@ import AdminAuthModal from '../../components/AdminAuthModal';
 import * as XLSX from 'xlsx';
 import { Trash2, Edit2, Printer, Upload, Download, Users, UserPlus, Search } from 'lucide-react';
 
+const DEFAULT_CLASSES = [
+  { id: 'uuid-x-dkv-1', class_name: 'X DKV 1', major: 'DKV', grade: 'X' },
+  { id: 'uuid-x-dkv-2', class_name: 'X DKV 2', major: 'DKV', grade: 'X' },
+  { id: 'uuid-x-tkj-1', class_name: 'X TKJ 1', major: 'TKJ', grade: 'X' },
+  { id: 'uuid-x-tkj-2', class_name: 'X TKJ 2', major: 'TKJ', grade: 'X' },
+  { id: 'uuid-x-tkr-1', class_name: 'X TKR 1', major: 'TKR', grade: 'X' },
+  { id: 'uuid-x-tkr-2', class_name: 'X TKR 2', major: 'TKR', grade: 'X' },
+  { id: 'uuid-xi-dkv', class_name: 'XI DKV', major: 'DKV', grade: 'XI' },
+  { id: 'uuid-xi-tkj-1', class_name: 'XI TKJ 1', major: 'TKJ', grade: 'XI' },
+  { id: 'uuid-xi-tkj-2', class_name: 'XI TKJ 2', major: 'TKJ', grade: 'XI' },
+  { id: 'uuid-xi-tkr-1', class_name: 'XI TKR 1', major: 'TKR', grade: 'XI' },
+  { id: 'uuid-xi-tkr-2', class_name: 'XI TKR 2', major: 'TKR', grade: 'XI' },
+  { id: 'uuid-xii-dkv', class_name: 'XII DKV', major: 'DKV', grade: 'XII' },
+  { id: 'uuid-xii-tkj-1', class_name: 'XII TKJ 1', major: 'TKJ', grade: 'XII' },
+  { id: 'uuid-xii-tkj-2', class_name: 'XII TKJ 2', major: 'TKJ', grade: 'XII' },
+  { id: 'uuid-xii-tkr-1', class_name: 'XII TKR 1', major: 'TKR', grade: 'XII' },
+  { id: 'uuid-xii-tkr-2', class_name: 'XII TKR 2', major: 'TKR', grade: 'XII' },
+];
+
 export default function MasterDataPage() {
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState('list'); // 'list' (Lihat Siswa Kelas) or 'add' (Tambah/Impor Siswa)
-  const [classes, setClasses] = useState([]);
+  const [activeTab, setActiveTab] = useState('list'); // 'list' or 'add'
+  const [classes, setClasses] = useState(DEFAULT_CLASSES);
   const [students, setStudents] = useState([]);
 
   // Filter untuk Manajemen / Lihat Siswa
@@ -30,53 +49,37 @@ export default function MasterDataPage() {
   }, [isAdmin]);
 
   async function fetchMaster() {
-    let { data: cls, error: clsErr } = await supabase.from('classes').select('*').order('class_name');
-    
-    if (clsErr || !cls || cls.length === 0) {
-      const defaultClasses = [
-        { class_name: 'X DKV 1', major: 'DKV', grade: 'X' },
-        { class_name: 'X DKV 2', major: 'DKV', grade: 'X' },
-        { class_name: 'X TKJ 1', major: 'TKJ', grade: 'X' },
-        { class_name: 'X TKJ 2', major: 'TKJ', grade: 'X' },
-        { class_name: 'X TKR 1', major: 'TKR', grade: 'X' },
-        { class_name: 'X TKR 2', major: 'TKR', grade: 'X' },
-        { class_name: 'XI DKV', major: 'DKV', grade: 'XI' },
-        { class_name: 'XI TKJ 1', major: 'TKJ', grade: 'XI' },
-        { class_name: 'XI TKJ 2', major: 'TKJ', grade: 'XI' },
-        { class_name: 'XI TKR 1', major: 'TKR', grade: 'XI' },
-        { class_name: 'XI TKR 2', major: 'TKR', grade: 'XI' },
-        { class_name: 'XII DKV', major: 'DKV', grade: 'XII' },
-        { class_name: 'XII TKJ 1', major: 'TKJ', grade: 'XII' },
-        { class_name: 'XII TKJ 2', major: 'TKJ', grade: 'XII' },
-        { class_name: 'XII TKR 1', major: 'TKR', grade: 'XII' },
-        { class_name: 'XII TKR 2', major: 'TKR', grade: 'XII' },
-      ];
+    try {
+      let { data: cls, error: clsErr } = await supabase.from('classes').select('*').order('class_name');
       
-      const { data: insertedCls, error: insErr } = await supabase.from('classes').upsert(defaultClasses, { onConflict: 'class_name' }).select('*');
-      if (!insErr && insertedCls) {
-        cls = insertedCls;
+      if (!clsErr && cls && cls.length > 0) {
+        setClasses(cls);
       } else {
-        const { data: refetchedCls } = await supabase.from('classes').select('*').order('class_name');
-        cls = refetchedCls || [];
+        // Try upserting default classes to supabase
+        await supabase.from('classes').upsert(DEFAULT_CLASSES.map(c => ({ class_name: c.class_name, major: c.major, grade: c.grade })), { onConflict: 'class_name' });
+        const { data: refetched } = await supabase.from('classes').select('*').order('class_name');
+        if (refetched && refetched.length > 0) {
+          setClasses(refetched);
+        }
       }
-    }
 
-    setClasses(cls);
-
-    const { data: st } = await supabase
-      .from('students')
-      .select('*, classes(id, class_name, major, grade)')
-      .eq('status', 'active')
-      .order('full_name');
-    
-    if (st) {
-      setStudents(st);
+      const { data: st } = await supabase
+        .from('students')
+        .select('*, classes(id, class_name, major, grade)')
+        .eq('status', 'active')
+        .order('full_name');
+      
+      if (st) {
+        setStudents(st);
+      }
+    } catch (err) {
+      console.error(err);
     }
   }
 
   const filteredClasses = classes.filter(c => {
     const matchMajor = (c.major || '').toUpperCase() === selectedMajorFilter.toUpperCase();
-    const matchGrade = (c.class_name || '').toUpperCase().startsWith(selectedGradeFilter.toUpperCase());
+    const matchGrade = (c.grade || c.class_name || '').toUpperCase().includes(selectedGradeFilter.toUpperCase());
     return matchMajor && matchGrade;
   });
 
@@ -137,7 +140,8 @@ export default function MasterDataPage() {
     setNisn(st.nisn);
     setFullName(st.full_name);
     if (st.classes?.major) setSelectedMajorFilter(st.classes.major);
-    if (st.classes?.class_name) {
+    if (st.classes?.grade) setSelectedGradeFilter(st.classes.grade);
+    else if (st.classes?.class_name) {
       if (st.classes.class_name.toUpperCase().startsWith('X ')) setSelectedGradeFilter('X');
       else if (st.classes.class_name.toUpperCase().startsWith('XI ')) setSelectedGradeFilter('XI');
       else if (st.classes.class_name.toUpperCase().startsWith('XII ')) setSelectedGradeFilter('XII');
@@ -145,7 +149,7 @@ export default function MasterDataPage() {
     setTargetClassId(st.class_id || '');
     setParentPhone(st.parent_phone || '');
     setIsEditing(true);
-    setActiveTab('add'); // Pindah ke tab form untuk update data
+    setActiveTab('add');
   }
 
   async function handleDeleteStudent(targetNisn) {
@@ -180,7 +184,7 @@ export default function MasterDataPage() {
     if (!file) return;
 
     if (!targetClassId) {
-      alert('Pilih Tingkat, Jurusan, dan Kelas tujuan terlebih dahulu!');
+      alert('Pilih Kelas Spesifik tujuan terlebih dahulu sebelum upload!');
       e.target.value = '';
       return;
     }
@@ -264,7 +268,7 @@ export default function MasterDataPage() {
                     setSelectedGradeFilter(e.target.value);
                     setTargetClassId('');
                   }}
-                  className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500 font-medium text-slate-800"
                 >
                   <option value="X">Kelas X</option>
                   <option value="XI">Kelas XI</option>
@@ -280,7 +284,7 @@ export default function MasterDataPage() {
                     setSelectedMajorFilter(e.target.value);
                     setTargetClassId('');
                   }}
-                  className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500 font-medium text-slate-800"
                 >
                   <option value="DKV">Desain Komunikasi Visual (DKV)</option>
                   <option value="TKJ">Teknik Komputer & Jaringan (TKJ)</option>
@@ -293,9 +297,9 @@ export default function MasterDataPage() {
                 <select
                   value={targetClassId}
                   onChange={(e) => setTargetClassId(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500 font-semibold text-blue-600"
+                  className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500 font-bold text-blue-600 bg-blue-50/50"
                 >
-                  <option value="">-- Semua Kelas dalam Filter --</option>
+                  <option value="">-- Pilih Kelas Spesifik --</option>
                   {filteredClasses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.class_name}
@@ -400,7 +404,6 @@ export default function MasterDataPage() {
           {/* TAB 2: TAMBAH & UPDATE DATA / IMPOR EXCEL */}
           {activeTab === 'add' && (
             <div className="space-y-6">
-              {/* Form Tambah / Update Satuan Siswa */}
               <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
                 <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
                   <h2 className="font-bold text-slate-800 text-lg">
@@ -522,7 +525,7 @@ export default function MasterDataPage() {
                     onClick={() => setPrintStudent(null)}
                     className="flex-1 py-2.5 rounded-full bg-slate-100 text-slate-700 font-bold text-xs"
                   >
-                    Tutup
+                    Tutup,
                   </button>
                 </div>
               </div>
