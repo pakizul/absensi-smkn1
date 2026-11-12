@@ -10,12 +10,10 @@ export default function MasterDataPage() {
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
 
-  // Form Filter Impor / Input Siswa Berdasarkan Tingkat & Jurusan
   const [selectedGradeFilter, setSelectedGradeFilter] = useState('X');
   const [selectedMajorFilter, setSelectedMajorFilter] = useState('DKV');
   const [targetClassId, setTargetClassId] = useState('');
 
-  // Form Satuan Siswa
   const [nisn, setNisn] = useState('');
   const [fullName, setFullName] = useState('');
   const [parentPhone, setParentPhone] = useState('');
@@ -28,42 +26,52 @@ export default function MasterDataPage() {
   }, [isAdmin]);
 
   async function fetchMaster() {
-    const { data: cls } = await supabase.from('classes').select('*').order('class_name');
-    if (cls && cls.length > 0) {
-      setClasses(cls);
-    } else {
-      setClasses([
-        { id: '1', class_name: 'X DKV 1', major: 'DKV', grade: 'X' },
-        { id: '2', class_name: 'X DKV 2', major: 'DKV', grade: 'X' },
-        { id: '3', class_name: 'X TKJ 1', major: 'TKJ', grade: 'X' },
-        { id: '4', class_name: 'X TKJ 2', major: 'TKJ', grade: 'X' },
-        { id: '5', class_name: 'X TKR 1', major: 'TKR', grade: 'X' },
-        { id: '6', class_name: 'X TKR 2', major: 'TKR', grade: 'X' },
-        { id: '7', class_name: 'XI DKV', major: 'DKV', grade: 'XI' },
-        { id: '8', class_name: 'XI TKJ 1', major: 'TKJ', grade: 'XI' },
-        { id: '9', class_name: 'XI TKJ 2', major: 'TKJ', grade: 'XI' },
-        { id: '10', class_name: 'XI TKR 1', major: 'TKR', grade: 'XI' },
-        { id: '11', class_name: 'XI TKR 2', major: 'TKR', grade: 'XI' },
-        { id: '12', class_name: 'XII DKV', major: 'DKV', grade: 'XII' },
-        { id: '13', class_name: 'XII TKJ 1', major: 'TKJ', grade: 'XII' },
-        { id: '14', class_name: 'XII TKJ 2', major: 'TKJ', grade: 'XII' },
-        { id: '15', class_name: 'XII TKR 1', major: 'TKR', grade: 'XII' },
-        { id: '16', class_name: 'XII TKR 2', major: 'TKR', grade: 'XII' },
-      ]);
+    let { data: cls, error: clsErr } = await supabase.from('classes').select('*').order('class_name');
+    
+    if (clsErr || !cls || cls.length === 0) {
+      const defaultClasses = [
+        { class_name: 'X DKV 1', major: 'DKV', grade: 'X' },
+        { class_name: 'X DKV 2', major: 'DKV', grade: 'X' },
+        { class_name: 'X TKJ 1', major: 'TKJ', grade: 'X' },
+        { class_name: 'X TKJ 2', major: 'TKJ', grade: 'X' },
+        { class_name: 'X TKR 1', major: 'TKR', grade: 'X' },
+        { class_name: 'X TKR 2', major: 'TKR', grade: 'X' },
+        { class_name: 'XI DKV', major: 'DKV', grade: 'XI' },
+        { class_name: 'XI TKJ 1', major: 'TKJ', grade: 'XI' },
+        { class_name: 'XI TKJ 2', major: 'TKJ', grade: 'XI' },
+        { class_name: 'XI TKR 1', major: 'TKR', grade: 'XI' },
+        { class_name: 'XI TKR 2', major: 'TKR', grade: 'XI' },
+        { class_name: 'XII DKV', major: 'DKV', grade: 'XII' },
+        { class_name: 'XII TKJ 1', major: 'TKJ', grade: 'XII' },
+        { class_name: 'XII TKJ 2', major: 'TKJ', grade: 'XII' },
+        { class_name: 'XII TKR 1', major: 'TKR', grade: 'XII' },
+        { class_name: 'XII TKR 2', major: 'TKR', grade: 'XII' },
+      ];
+      
+      const { data: insertedCls, error: insErr } = await supabase.from('classes').upsert(defaultClasses, { onConflict: 'class_name' }).select('*');
+      if (!insErr && insertedCls) {
+        cls = insertedCls;
+      } else {
+        cls = defaultClasses.map((c, i) => ({ id: String(i + 1), ...c }));
+      }
     }
 
-    const { data: st } = await supabase
+    setClasses(cls || []);
+
+    const { data: st, error: stErr } = await supabase
       .from('students')
       .select('*, classes(class_name, major)')
       .eq('status', 'active')
       .order('full_name');
-    if (st) setStudents(st);
+    
+    if (st) {
+      setStudents(st);
+    }
   }
 
-  // Filter kelas sesuai tingkat (X, XI, XII) dan jurusan (DKV, TKJ, TKR)
   const filteredClasses = classes.filter(c => {
-    const matchMajor = c.major === selectedMajorFilter;
-    const matchGrade = c.class_name.toUpperCase().startsWith(selectedGradeFilter.toUpperCase());
+    const matchMajor = (c.major || '').toUpperCase() === selectedMajorFilter.toUpperCase();
+    const matchGrade = (c.class_name || '').toUpperCase().startsWith(selectedGradeFilter.toUpperCase());
     return matchMajor && matchGrade;
   });
 
@@ -74,29 +82,38 @@ export default function MasterDataPage() {
       return;
     }
 
+    const payload = {
+      nisn: nisn.trim(),
+      full_name: fullName.trim(),
+      class_id: targetClassId,
+      parent_phone: parentPhone.trim(),
+      status: 'active',
+    };
+
     if (isEditing) {
-      await supabase
+      const { error } = await supabase
         .from('students')
         .update({
-          full_name: fullName,
+          full_name: fullName.trim(),
           class_id: targetClassId,
-          parent_phone: parentPhone,
+          parent_phone: parentPhone.trim(),
         })
-        .eq('nisn', nisn);
+        .eq('nisn', nisn.trim());
+      if (error) {
+        alert('Gagal memperbarui siswa ke Supabase: ' + error.message);
+        return;
+      }
     } else {
-      await supabase.from('students').insert([
-        {
-          nisn: nisn.trim(),
-          full_name: fullName,
-          class_id: targetClassId,
-          parent_phone: parentPhone,
-          status: 'active',
-        },
-      ]);
+      const { error } = await supabase.from('students').upsert([payload], { onConflict: 'nisn' });
+      if (error) {
+        alert('Gagal menyimpan siswa ke Supabase: ' + error.message);
+        return;
+      }
     }
 
     resetStudentForm();
-    fetchMaster();
+    await fetchMaster();
+    alert('Data siswa berhasil disimpan ke database Supabase!');
   }
 
   function handleEditStudent(st) {
@@ -104,9 +121,9 @@ export default function MasterDataPage() {
     setFullName(st.full_name);
     if (st.classes?.major) setSelectedMajorFilter(st.classes.major);
     if (st.classes?.class_name) {
-      if (st.classes.class_name.startsWith('X ')) setSelectedGradeFilter('X');
-      else if (st.classes.class_name.startsWith('XI ')) setSelectedGradeFilter('XI');
-      else if (st.classes.class_name.startsWith('XII ')) setSelectedGradeFilter('XII');
+      if (st.classes.class_name.toUpperCase().startsWith('X ')) setSelectedGradeFilter('X');
+      else if (st.classes.class_name.toUpperCase().startsWith('XI ')) setSelectedGradeFilter('XI');
+      else if (st.classes.class_name.toUpperCase().startsWith('XII ')) setSelectedGradeFilter('XII');
     }
     setTargetClassId(st.class_id || '');
     setParentPhone(st.parent_phone || '');
@@ -115,8 +132,12 @@ export default function MasterDataPage() {
 
   async function handleDeleteStudent(targetNisn) {
     if (!confirm('Nonaktifkan siswa ini?')) return;
-    await supabase.from('students').update({ status: 'inactive' }).eq('nisn', targetNisn);
-    fetchMaster();
+    const { error } = await supabase.from('students').update({ status: 'inactive' }).eq('nisn', targetNisn);
+    if (error) {
+      alert('Gagal menghapus siswa: ' + error.message);
+      return;
+    }
+    await fetchMaster();
   }
 
   function resetStudentForm() {
@@ -148,26 +169,34 @@ export default function MasterDataPage() {
     
     const reader = new FileReader();
     reader.onload = async (evt) => {
-      const bstr = evt.target.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      const data = XLSX.utils.sheet_to_json(ws);
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
 
-      const payload = data.map((row) => ({
-        nisn: String(row['NISN'] || '').trim(),
-        full_name: String(row['Nama Lengkap'] || '').trim(),
-        class_id: targetClassId,
-        parent_phone: String(row['No. HP Orang Tua'] || '').trim(),
-        status: 'active',
-      })).filter(r => r.nisn && r.full_name);
+        const payload = data.map((row) => ({
+          nisn: String(row['NISN'] || row['nisn'] || row['Nisn'] || '').trim(),
+          full_name: String(row['Nama Lengkap'] || row['nama lengkap'] || row['Nama'] || row['nama'] || '').trim(),
+          class_id: targetClassId,
+          parent_phone: String(row['No. HP Orang Tua'] || row['no hp orang tua'] || row['Telepon'] || row['telepon'] || '').trim(),
+          status: 'active',
+        })).filter(r => r.nisn && r.full_name);
 
-      if (payload.length > 0) {
-        await supabase.from('students').upsert(payload);
-        alert(`${payload.length} data siswa berhasil diimpor ke kelas yang dipilih!`);
-        fetchMaster();
-      } else {
-        alert('Format file tidak valid atau kosong.');
+        if (payload.length > 0) {
+          const { error } = await supabase.from('students').upsert(payload, { onConflict: 'nisn' });
+          if (error) {
+            alert('Gagal mengimpor ke Supabase: ' + error.message);
+          } else {
+            alert(`Berhasil! ${payload.length} data siswa telah tersimpan dan disinkronkan ke database Supabase.`);
+            await fetchMaster();
+          }
+        } else {
+          alert('Format kolom file Excel tidak dikenali. Pastikan terdapat kolom header "NISN" dan "Nama Lengkap".');
+        }
+      } catch (err) {
+        alert('Terjadi kesalahan membaca file Excel: ' + err.message);
       }
       e.target.value = '';
     };
@@ -186,7 +215,7 @@ export default function MasterDataPage() {
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-blue-100">
               <h2 className="font-bold text-slate-800 mb-2">Pilih Tingkat, Jurusan & Kelas Tujuan</h2>
               <p className="text-xs text-slate-500 mb-4">
-                Tentukan Tingkat Kelas (X, XI, XII) dan Jurusan (DKV, TKJ, TKR) terlebih dahulu sebelum mengupload file Excel/CSV atau menambah data siswa.
+                Tentukan Tingkat Kelas (X, XI, XII) dan Jurusan (DKV, TKJ, TKR) terlebih dahulu sebelum mengupload file Excel/CSV atau menambah data siswa ke database Supabase.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -325,7 +354,7 @@ export default function MasterDataPage() {
 
             {/* Tabel Daftar Siswa */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-              <h2 className="font-bold text-slate-800 mb-4">Daftar Siswa Aktif ({students.length})</h2>
+              <h2 className="font-bold text-slate-800 mb-4">Daftar Siswa Aktif di Database ({students.length})</h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -337,38 +366,46 @@ export default function MasterDataPage() {
                     </tr>
                   </thead>
                   <tbody className="text-sm divide-y divide-slate-50">
-                    {students.map((st) => (
-                      <tr key={st.nisn} className="hover:bg-slate-50">
-                        <td className="py-3 px-3 font-mono text-xs">{st.nisn}</td>
-                        <td className="py-3 px-3 font-semibold text-slate-800">{st.full_name}</td>
-                        <td className="py-3 px-3 text-xs text-slate-500">
-                          {st.classes ? `${st.classes.class_name} (${st.classes.major})` : '-'}
-                        </td>
-                        <td className="py-3 px-3 flex justify-end gap-1">
-                          <button
-                            onClick={() => setPrintStudent(st)}
-                            title="Lihat / Cetak Barcode NISN"
-                            className="p-2 text-teal-600 hover:bg-teal-50 rounded-full"
-                          >
-                            <Printer className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleEditStudent(st)}
-                            title="Edit"
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-full"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteStudent(st.nisn)}
-                            title="Hapus"
-                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-full"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                    {students.length === 0 ? (
+                      <tr>
+                        <td colSpan="4" className="py-8 text-center text-xs text-slate-400">
+                          Belum ada data siswa di database Supabase. Silakan upload file Excel atau tambah siswa baru.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      students.map((st) => (
+                        <tr key={st.nisn} className="hover:bg-slate-50">
+                          <td className="py-3 px-3 font-mono text-xs">{st.nisn}</td>
+                          <td className="py-3 px-3 font-semibold text-slate-800">{st.full_name}</td>
+                          <td className="py-3 px-3 text-xs text-slate-500">
+                            {st.classes ? `${st.classes.class_name} (${st.classes.major})` : '-'}
+                          </td>
+                          <td className="py-3 px-3 flex justify-end gap-1">
+                            <button
+                              onClick={() => setPrintStudent(st)}
+                              title="Lihat / Cetak Barcode NISN"
+                              className="p-2 text-teal-600 hover:bg-teal-50 rounded-full"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleEditStudent(st)}
+                              title="Edit"
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-full"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteStudent(st.nisn)}
+                              title="Hapus"
+                              className="p-2 text-rose-500 hover:bg-rose-50 rounded-full"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -380,7 +417,7 @@ export default function MasterDataPage() {
               <div className="bg-white rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl">
                 <div className="bg-gradient-to-br from-blue-600 to-emerald-400 text-white p-5 rounded-2xl">
                   <p className="text-[10px] font-bold tracking-wider uppercase">Kartu Pelajar Digital</p>
-                  <h3 className="font-bold text-base mt-0.5">SMKN 1 SIMPANG EMPAT</h3>
+                  <h3 className="h3 font-bold text-base mt-0.5">SMKN 1 SIMPANG EMPAT</h3>
                   <div className="bg-white text-slate-900 rounded-xl p-4 mt-4">
                     <p className="font-bold text-sm">{printStudent.full_name}</p>
                     <p className="text-xs text-slate-500 mb-3">
