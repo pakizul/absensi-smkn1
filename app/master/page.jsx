@@ -55,7 +55,7 @@ export default function MasterDataPage() {
       if (!clsErr && cls && cls.length > 0) {
         setClasses(cls);
       } else {
-        // Try upserting default classes to supabase
+        if (clsErr) alert('Gagal memuat kelas: ' + clsErr.message + '. Pastikan supabase/schema.sql sudah dijalankan.');
         await supabase.from('classes').upsert(DEFAULT_CLASSES.map(c => ({ class_name: c.class_name, major: c.major, grade: c.grade })), { onConflict: 'class_name' });
         const { data: refetched } = await supabase.from('classes').select('*').order('class_name');
         if (refetched && refetched.length > 0) {
@@ -63,12 +63,13 @@ export default function MasterDataPage() {
         }
       }
 
-      const { data: st } = await supabase
+      const { data: st, error: stErr } = await supabase
         .from('students')
         .select('*, classes(id, class_name, major, grade)')
         .eq('status', 'active')
         .order('full_name');
       
+      if (stErr) alert('Gagal memuat siswa: ' + stErr.message);
       if (st) {
         setStudents(st);
       }

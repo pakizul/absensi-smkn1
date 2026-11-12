@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { todayWITA } from '../../lib/time';
 import AdminAuthModal from '../../components/AdminAuthModal';
 import { ClipboardCheck, DoorOpen, RotateCcw } from 'lucide-react';
 
@@ -15,7 +16,7 @@ export default function IzinPage() {
   const [leaveType, setLeaveType] = useState('Out');
 
   const [manualNisn, setManualNisn] = useState('');
-  const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
+  const [manualDate, setManualDate] = useState(todayWITA());
   const [manualStatus, setManualStatus] = useState('Sakit');
   const [manualNotes, setManualNotes] = useState('');
 
@@ -24,18 +25,20 @@ export default function IzinPage() {
   }, [isAdmin]);
 
   async function fetchData() {
-    const { data: st } = await supabase
+    const { data: st, error: stErr } = await supabase
       .from('students')
       .select('nisn, full_name, classes(class_name, major)')
       .eq('status', 'active')
       .order('full_name');
+    if (stErr) alert('Gagal memuat siswa: ' + stErr.message);
     if (st) setStudents(st);
 
-    const { data: lv } = await supabase
+    const { data: lv, error: lvErr } = await supabase
       .from('leave_logs')
       .select('*, students(full_name, classes(class_name, major))')
       .order('leave_time', { ascending: false })
       .limit(15);
+    if (lvErr) alert('Gagal memuat log izin: ' + lvErr.message);
     if (lv) setActiveLeaves(lv);
   }
 
@@ -44,7 +47,7 @@ export default function IzinPage() {
     if (!leaveNisn || !leaveReason || !approvedBy) return;
 
     const now = new Date().toISOString();
-    await supabase.from('leave_logs').insert([
+    const { error: leaveErr } = await supabase.from('leave_logs').insert([
       {
         nisn: leaveNisn,
         leave_time: now,
@@ -53,21 +56,33 @@ export default function IzinPage() {
         status: leaveType,
       },
     ]);
+    if (leaveErr) {
+      alert('Gagal mencatat izin keluar: ' + leaveErr.message);
+      return;
+    }
 
     if (leaveType === 'Permanent_Home') {
-      const today = new Date().toISOString().split('T')[0];
-      const { data: att } = await supabase
+      const today = todayWITA();
+      const note = `Pulang awal: ${leaveReason} (Acc: ${approvedBy})`;
+      const { data: att, error: attErr } = await supabase
         .from('attendance')
         .select('id')
         .eq('nisn', leaveNisn)
         .eq('date', today)
         .maybeSingle();
+      if (attErr) {
+        alert('Izin tercatat, tetapi gagal membaca absensi: ' + attErr.message);
+        return;
+      }
 
-      if (att) {
-        await supabase
-          .from('attendance')
-          .update({ time_out: now, notes: `Pulang awal: ${leaveReason} (Acc: ${approvedBy})` })
-          .eq('id', att.id);
+      const { error: saveErr } = att
+        ? await supabase.from('attendance').update({ time_out: now, notes: note }).eq('id', att.id)
+        : await supabase
+            .from('attendance')
+            .insert([{ nisn: leaveNisn, date: today, time_out: now, status: 'Hadir', notes: note, recorded_by: 'Guru Piket' }]);
+      if (saveErr) {
+        alert('Izin tercatat, tetapi gagal memperbarui absensi: ' + saveErr.message);
+        return;
       }
     }
 
@@ -79,10 +94,14 @@ export default function IzinPage() {
   }
 
   async function handleMarkReturned(id) {
-    await supabase
+    const { error } = await supabase
       .from('leave_logs')
       .update({ return_time: new Date().toISOString(), status: 'Returned' })
       .eq('id', id);
+    if (error) {
+      alert('Gagal menandai kembali: ' + error.message);
+      return;
+    }
     fetchData();
   }
 
@@ -90,28 +109,34 @@ export default function IzinPage() {
     e.preventDefault();
     if (!manualNisn || !manualDate) return;
 
-    const { data: existing } = await supabase
+    const { data: existing, error: readErr } = await supabase
       .from('attendance')
       .select('id')
       .eq('nisn', manualNisn)
       .eq('date', manualDate)
       .maybeSingle();
+    if (readErr) {
+      alert('Gagal membaca absensi: ' + readErr.message);
+      return;
+    }
 
-    if (existing) {
-      await supabase
-        .from('attendance')
-        .update({ status: manualStatus, notes: manualNotes, recorded_by: 'Guru Piket' })
-        .eq('id', existing.id);
-    } else {
-      await supabase.from('attendance').insert([
-        {
-          nisn: manualNisn,
-          date: manualDate,
-          status: manualStatus,
-          notes: manualNotes,
-          recorded_by: 'Guru Piket',
-        },
-      ]);
+    const { error } = existing
+      ? await supabase
+          .from('attendance')
+          .update({ status: manualStatus, notes: manualNotes, recorded_by: 'Guru Piket' })
+          .eq('id', existing.id)
+      : await supabase.from('attendance').insert([
+          {
+            nisn: manualNisn,
+            date: manualDate,
+            status: manualStatus,
+            notes: manualNotes,
+            recorded_by: 'Guru Piket',
+          },
+        ]);
+    if (error) {
+      alert('Gagal menyimpan status: ' + error.message);
+      return;
     }
 
     alert('Status ketidakhadiran berhasil diperbarui!');

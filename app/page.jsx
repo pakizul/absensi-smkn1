@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
+import { wita, todayWITA } from '../lib/time';
 import { ScanLine, ClipboardCheck, Users, FileSpreadsheet, AlertTriangle, Clock, CheckCircle2, UserX, Search } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -21,19 +22,20 @@ export default function DashboardPage() {
   }, []);
 
   async function fetchDashboardData() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayWITA();
 
     const { count: totalSiswa } = await supabase
       .from('students')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'active');
 
-    const { data: todayAtt } = await supabase
+    const { data: todayAtt, error: todayErr } = await supabase
       .from('attendance')
       .select('*, students(full_name, classes(class_name, major))')
       .eq('date', today)
       .order('created_at', { ascending: false });
 
+    if (todayErr) console.error('Gagal memuat absensi hari ini:', todayErr);
     if (todayAtt) {
       const hadir = todayAtt.filter((a) => a.status === 'Hadir').length;
       const terlambat = todayAtt.filter((a) => a.status === 'Terlambat').length;
@@ -50,7 +52,7 @@ export default function DashboardPage() {
       setRecentLogs(todayAtt.slice(0, 8));
     }
 
-    const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+    const firstDayOfMonth = `${wita().month}-01`;
     const { data: monthlyAtt } = await supabase
       .from('attendance')
       .select('nisn, status, students(full_name, parent_phone, classes(class_name, major))')

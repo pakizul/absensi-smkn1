@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
+import { wita, fmtTime } from '../../lib/time';
 import { ScanLine, CheckCircle2, AlertCircle, LogOut, RotateCcw } from 'lucide-react';
 
 export default function ScanPage() {
@@ -31,6 +32,15 @@ export default function ScanPage() {
     } catch (err) {}
   };
 
+  const timerRef = useRef(null);
+
+  const fail = (title, message, type = 'error') => {
+    playBeep(false);
+    setFeedback({ type, title, message });
+  };
+  const dbFail = (step, error) =>
+    fail('Gagal Menyimpan Data', `${step}: ${error.message}${error.code ? ` (kode ${error.code})` : ''}`);
+
   const handleScanSubmit = async (e) => {
     e.preventDefault();
     const nisn = nisnInput.trim();
@@ -38,33 +48,28 @@ export default function ScanPage() {
 
     setLoading(true);
     setNisnInput('');
+    clearTimeout(timerRef.current);
 
     try {
       const { data: student, error: studentErr } = await supabase
         .from('students')
         .select('*, classes(class_name, major)')
         .eq('nisn', nisn)
-        .single();
+        .eq('status', 'active')
+        .maybeSingle();
 
-      if (studentErr || !student) {
-        playBeep(false);
-        setFeedback({
-          type: 'error',
-          title: 'NISN Tidak Terdaftar',
-          message: `Kode barcode (${nisn}) tidak ditemukan dalam database siswa.`,
-        });
-        setLoading(false);
-        return;
+      if (studentErr) return dbFail('Membaca data siswa', studentErr);
+      if (!student) {
+        return fail('NISN Tidak Terdaftar', `Kode barcode (${nisn}) tidak ditemukan dalam database siswa.`);
       }
 
       const now = new Date();
-      const today = now.toISOString().split('T')[0];
-      const dayOfWeek = now.getDay();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      const totalMinutes = hours * 60 + minutes;
+      const t = wita(now); // tanggal & jam WITA
+      const today = t.date;
+      const timeLabel = fmtTime(now.toISOString()) + ' WITA';
 
-      const { data: activeLeave } = await supabase
+      // 1. Siswa yang sedang izin keluar -> catat kembali
+      const { data: activeLeave, error: leaveErr } = await supabase
         .from('leave_logs')
         .select('*')
         .eq('nisn', nisn)
@@ -72,120 +77,111 @@ export default function ScanPage() {
         .order('leave_time', { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (leaveErr) return dbFail('Membaca izin keluar', leaveErr);
 
       if (activeLeave) {
-        await supabase
+        const { error } = await supabase
           .from('leave_logs')
           .update({ return_time: now.toISOString(), status: 'Returned' })
           .eq('id', activeLeave.id);
+        if (error) return dbFail('Mencatat kembali dari izin', error);
 
         playBeep(true);
         setFeedback({
           type: 'success',
           badge: 'Kembali ke Sekolah',
           student,
-          time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WITA',
+          time: timeLabel,
           note: `Tercatat kembali dari izin: ${activeLeave.reason}`,
         });
-        setLoading(false);
         return;
       }
 
-      const { data: existingAtt } = await supabase
+      // 2. Absensi hari ini
+      const { data: existingAtt, error: attErr } = await supabase
         .from('attendance')
         .select('*')
         .eq('nisn', nisn)
         .eq('date', today)
         .maybeSingle();
+      if (attErr) return dbFail('Membaca absensi hari ini', attErr);
 
       if (scanMode === 'IN') {
-        if (existingAtt) {
-          playBeep(false);
-          setFeedback({
-            type: 'warning',
-            title: 'Sudah Absen Masuk',
-            message: `${student.full_name} sudah tercatat masuk hari ini dengan status ${existingAtt.status}.`,
-          });
-          setLoading(false);
-          return;
+        if (existingAtt && existingAtt.time_in) {
+          return fail(
+            'Sudah Absen Masuk',
+            `${student.full_name} sudah tercatat masuk hari ini dengan status ${existingAtt.status}.`,
+            'warning'
+          );
         }
 
-        const isLate = totalMinutes > 7 * 60 + 30;
+        const isLate = t.minutes > 7 * 60 + 30;
         const status = isLate ? 'Terlambat' : 'Hadir';
 
-        await supabase.from('attendance').insert([
-          {
-            nisn,
-            date: today,
-            time_in: now.toISOString(),
-            status,
-            recorded_by: 'Scanner Gerbang',
-          },
-        ]);
+        // Ada baris tanpa jam masuk (mis. Sakit/Izin yang ternyata hadir) -> lengkapi, bukan insert baru
+        const { error } = existingAtt
+          ? await supabase
+              .from('attendance')
+              .update({ time_in: now.toISOString(), status, recorded_by: 'Scanner Gerbang' })
+              .eq('id', existingAtt.id)
+          : await supabase.from('attendance').insert([
+              { nisn, date: today, time_in: now.toISOString(), status, recorded_by: 'Scanner Gerbang' },
+            ]);
+
+        if (error) {
+          if (error.code === '23505') return fail('Sudah Absen Masuk', 'Absen masuk siswa ini sudah tercatat.', 'warning');
+          return dbFail('Menyimpan absen masuk', error);
+        }
 
         playBeep(true);
         setFeedback({
           type: 'success',
           badge: status,
           student,
-          time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WITA',
+          time: timeLabel,
           note: isLate ? 'Melewati batas masuk pukul 07.30' : 'Kehadiran masuk berhasil dicatat',
         });
       } else {
-        const minPulangMinutes = dayOfWeek === 5 ? 11 * 60 + 30 : 16 * 60 + 30;
-        if (totalMinutes < minPulangMinutes) {
-          playBeep(false);
-          setFeedback({
-            type: 'warning',
-            title: 'Belum Waktunya Pulang',
-            message:
-              dayOfWeek === 5
-                ? 'Jadwal pulang hari Jumat adalah pukul 11.30. Gunakan menu Izin Piket jika pulang awal.'
-                : 'Jadwal pulang Senin–Kamis adalah pukul 16.30. Gunakan menu Izin Piket jika pulang awal.',
-          });
-          setLoading(false);
-          return;
+        const minPulangMinutes = t.dow === 5 ? 11 * 60 + 30 : 16 * 60 + 30;
+        if (t.minutes < minPulangMinutes) {
+          return fail(
+            'Belum Waktunya Pulang',
+            t.dow === 5
+              ? 'Jadwal pulang hari Jumat adalah pukul 11.30. Gunakan menu Izin Piket jika pulang awal.'
+              : 'Jadwal pulang Senin–Kamis adalah pukul 16.30. Gunakan menu Izin Piket jika pulang awal.',
+            'warning'
+          );
         }
 
-        if (!existingAtt) {
-          await supabase.from('attendance').insert([
-            {
-              nisn,
-              date: today,
-              time_out: now.toISOString(),
-              status: 'Hadir',
-              notes: 'Scan pulang tanpa scan masuk',
-              recorded_by: 'Scanner Gerbang',
-            },
-          ]);
-        } else {
-          await supabase
-            .from('attendance')
-            .update({ time_out: now.toISOString() })
-            .eq('id', existingAtt.id);
-        }
+        const { error } = !existingAtt
+          ? await supabase.from('attendance').insert([
+              {
+                nisn,
+                date: today,
+                time_out: now.toISOString(),
+                status: 'Hadir',
+                notes: 'Scan pulang tanpa scan masuk',
+                recorded_by: 'Scanner Gerbang',
+              },
+            ])
+          : await supabase.from('attendance').update({ time_out: now.toISOString() }).eq('id', existingAtt.id);
+
+        if (error) return dbFail('Menyimpan absen pulang', error);
 
         playBeep(true);
         setFeedback({
           type: 'success',
           badge: 'Absen Pulang',
           student,
-          time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WITA',
+          time: timeLabel,
           note: 'Selamat jalan, hati-hati di jalan!',
         });
       }
     } catch (error) {
-      playBeep(false);
-      setFeedback({
-        type: 'error',
-        title: 'Terjadi Kesalahan',
-        message: 'Gagal terhubung ke database Supabase.',
-      });
+      fail('Terjadi Kesalahan', error?.message || 'Gagal terhubung ke database Supabase.');
     } finally {
       setLoading(false);
-      setTimeout(() => {
-        setFeedback(null);
-      }, 5000);
+      timerRef.current = setTimeout(() => setFeedback(null), 5000);
     }
   };
 

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { wita, todayWITA, monthRange } from '../../lib/time';
 import AdminAuthModal from '../../components/AdminAuthModal';
 import * as XLSX from 'xlsx';
 import { Download } from 'lucide-react';
@@ -10,8 +11,8 @@ export default function RekapPage() {
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState('');
   const [reportType, setReportType] = useState('harian');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedDate, setSelectedDate] = useState(todayWITA());
+  const [selectedMonth, setSelectedMonth] = useState(wita().month);
   const [records, setRecords] = useState([]);
 
   useEffect(() => {
@@ -42,13 +43,17 @@ export default function RekapPage() {
     if (reportType === 'harian') {
       query = query.eq('date', selectedDate);
     } else if (reportType === 'bulanan') {
-      const start = `${selectedMonth}-01`;
-      const end = `${selectedMonth}-31`;
+      const { start, end } = monthRange(selectedMonth);
       query = query.gte('date', start).lte('date', end);
     }
 
-    const { data } = await query.order('date', { ascending: false });
-    if (data) setRecords(data);
+    const { data, error } = await query.order('date', { ascending: false });
+    if (error) {
+      alert('Gagal memuat rekap: ' + error.message);
+      setRecords([]);
+      return;
+    }
+    setRecords(data || []);
   }
 
   function exportToExcel() {
