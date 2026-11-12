@@ -1,17 +1,17 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ScanLine, ClipboardCheck, Users, FileSpreadsheet } from 'lucide-react';
+import { LayoutDashboard, ScanLine, ClipboardCheck, Users, FileSpreadsheet, Lock, Unlock } from 'lucide-react';
 
 export default function Navbar() {
   const pathname = usePathname();
 
   const navItems = [
-    { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/scan', label: 'Scan Barcode', icon: ScanLine },
-    { href: '/izin', label: 'Izin & Piket', icon: ClipboardCheck },
-    { href: '/master', label: 'Kelas & Siswa', icon: Users },
-    { href: '/rekap', label: 'Rekap Laporan', icon: FileSpreadsheet },
+    { href: '/', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
+    { href: '/scan', label: 'Scan Barcode', icon: ScanLine, adminOnly: false },
+    { href: '/izin', label: 'Izin & Piket', icon: ClipboardCheck, adminOnly: true },
+    { href: '/master', label: 'Kelas & Siswa', icon: Users, adminOnly: true },
+    { href: '/rekap', label: 'Rekap Laporan', icon: FileSpreadsheet, adminOnly: true },
   ];
 
   return (
@@ -44,6 +44,7 @@ export default function Navbar() {
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.label}</span>
+                  {item.adminOnly && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full ml-0.5">Admin</span>}
                 </Link>
               );
             })}

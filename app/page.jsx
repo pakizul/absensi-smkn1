@@ -30,7 +30,7 @@ export default function DashboardPage() {
 
     const { data: todayAtt } = await supabase
       .from('attendance')
-      .select('*, students(full_name, classes(class_name))')
+      .select('*, students(full_name, classes(class_name, major))')
       .eq('date', today)
       .order('created_at', { ascending: false });
 
@@ -50,11 +50,10 @@ export default function DashboardPage() {
       setRecentLogs(todayAtt.slice(0, 8));
     }
 
-    // Early Warning System: hitung akumulasi Sakit / Alpa bulan ini
     const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
     const { data: monthlyAtt } = await supabase
       .from('attendance')
-      .select('nisn, status, students(full_name, parent_phone, classes(class_name))')
+      .select('nisn, status, students(full_name, parent_phone, classes(class_name, major))')
       .gte('date', firstDayOfMonth)
       .in('status', ['Sakit', 'Alpa']);
 
@@ -65,7 +64,7 @@ export default function DashboardPage() {
           grouped[item.nisn] = {
             nisn: item.nisn,
             name: item.students?.full_name || item.nisn,
-            className: item.students?.classes?.class_name || '-',
+            className: item.students?.classes ? `${item.students.classes.class_name} (${item.students.classes.major})` : '-',
             phone: item.students?.parent_phone || '-',
             sakit: 0,
             alpa: 0,
@@ -88,7 +87,6 @@ export default function DashboardPage() {
 
   return (
     <div className="pb-12">
-      {/* Header Bergradasi Biru-Tosca ala Referensi UI */}
       <div className="bg-gradient-to-br from-blue-600 via-blue-500 to-emerald-400 text-white pt-8 pb-20 px-4 sm:px-8 rounded-b-[2.5rem] shadow-lg">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -117,7 +115,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Quick Action Cards (Menumpuk di atas header) */}
       <div className="max-w-7xl mx-auto px-4 sm:px-8 -mt-12">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Link href="/scan" className="bg-white/95 backdrop-blur-md p-5 rounded-3xl shadow-md hover:shadow-xl transition-all border border-blue-50 flex flex-col items-center text-center group">
@@ -153,7 +150,6 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        {/* Statistik Kehadiran Hari Ini */}
         <div className="mt-8">
           <h2 className="text-lg font-bold text-slate-800 mb-4">Ringkasan Kehadiran Hari Ini</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -199,9 +195,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Grid 2 Kolom: Early Warning System & Aktivitas Scan Terbaru */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
-          {/* Early Warning System */}
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-rose-100">
             <div className="flex items-center gap-2 text-rose-600 font-bold mb-4">
               <AlertTriangle className="w-5 h-5" />
@@ -232,7 +226,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Log Kehadiran Terbaru */}
           <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
             <h2 className="font-bold text-slate-800 mb-4">Aktivitas Absensi Hari Ini</h2>
             <div className="overflow-x-auto">
@@ -241,7 +234,7 @@ export default function DashboardPage() {
                   <tr className="border-b border-slate-100 text-xs text-slate-400">
                     <th className="py-2.5 px-3">NISN</th>
                     <th className="py-2.5 px-3">Nama Siswa</th>
-                    <th className="py-2.5 px-3">Kelas</th>
+                    <th className="py-2.5 px-3">Kelas & Jurusan</th>
                     <th className="py-2.5 px-3">Jam Masuk</th>
                     <th className="py-2.5 px-3">Status</th>
                   </tr>
@@ -258,7 +251,9 @@ export default function DashboardPage() {
                       <tr key={log.id} className="hover:bg-slate-50/80">
                         <td className="py-3 px-3 font-mono text-xs text-slate-600">{log.nisn}</td>
                         <td className="py-3 px-3 font-semibold text-slate-800">{log.students?.full_name || '-'}</td>
-                        <td className="py-3 px-3 text-xs text-slate-500">{log.students?.classes?.class_name || '-'}</td>
+                        <td className="py-3 px-3 text-xs text-slate-500">
+                          {log.students?.classes ? `${log.students.classes.class_name} (${log.students.classes.major})` : '-'}
+                        </td>
                         <td className="py-3 px-3 text-xs text-slate-600">
                           {log.time_in ? new Date(log.time_in).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                         </td>

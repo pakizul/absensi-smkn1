@@ -5,7 +5,7 @@ import { ScanLine, CheckCircle2, AlertCircle, LogOut, RotateCcw } from 'lucide-r
 
 export default function ScanPage() {
   const [nisnInput, setNisnInput] = useState('');
-  const [scanMode, setScanMode] = useState('IN'); // 'IN' = Masuk/Kembali, 'OUT' = Pulang
+  const [scanMode, setScanMode] = useState('IN');
   const [feedback, setFeedback] = useState(null);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef(null);
@@ -40,10 +40,9 @@ export default function ScanPage() {
     setNisnInput('');
 
     try {
-      // 1. Cek data siswa berdasarkan NISN
       const { data: student, error: studentErr } = await supabase
         .from('students')
-        .select('*, classes(class_name)')
+        .select('*, classes(class_name, major)')
         .eq('nisn', nisn)
         .single();
 
@@ -60,12 +59,11 @@ export default function ScanPage() {
 
       const now = new Date();
       const today = now.toISOString().split('T')[0];
-      const dayOfWeek = now.getDay(); // 0=Minggu, 1=Senin, ..., 5=Jumat, 6=Sabtu
+      const dayOfWeek = now.getDay();
       const hours = now.getHours();
       const minutes = now.getMinutes();
       const totalMinutes = hours * 60 + minutes;
 
-      // 2. Cek apakah siswa sedang berstatus Izin Keluar Sementara (leave_logs)
       const { data: activeLeave } = await supabase
         .from('leave_logs')
         .select('*')
@@ -76,7 +74,6 @@ export default function ScanPage() {
         .maybeSingle();
 
       if (activeLeave) {
-        // Siswa kembali ke sekolah setelah izin keluar
         await supabase
           .from('leave_logs')
           .update({ return_time: now.toISOString(), status: 'Returned' })
@@ -94,7 +91,6 @@ export default function ScanPage() {
         return;
       }
 
-      // 3. Cek log kehadiran hari ini
       const { data: existingAtt } = await supabase
         .from('attendance')
         .select('*')
@@ -114,7 +110,6 @@ export default function ScanPage() {
           return;
         }
 
-        // Validasi jam masuk 07.30 (450 menit)
         const isLate = totalMinutes > 7 * 60 + 30;
         const status = isLate ? 'Terlambat' : 'Hadir';
 
@@ -137,8 +132,6 @@ export default function ScanPage() {
           note: isLate ? 'Melewati batas masuk pukul 07.30' : 'Kehadiran masuk berhasil dicatat',
         });
       } else {
-        // Mode Scan Pulang (OUT)
-        // Jumat pulang 11.30 (690 menit), Senin-Kamis pulang 16.30 (990 menit)
         const minPulangMinutes = dayOfWeek === 5 ? 11 * 60 + 30 : 16 * 60 + 30;
         if (totalMinutes < minPulangMinutes) {
           playBeep(false);
@@ -199,7 +192,6 @@ export default function ScanPage() {
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-blue-600 via-teal-500 to-emerald-400 flex flex-col items-center justify-center p-4">
       <div className="bg-white/95 backdrop-blur-md rounded-[2rem] shadow-2xl w-full max-w-lg p-6 sm:p-8 text-slate-800 relative overflow-hidden">
-        {/* Header */}
         <div className="text-center mb-6">
           <span className="bg-teal-100 text-teal-700 text-xs font-bold px-3.5 py-1 rounded-full">
             POS PIKET & GERBANG UTAMA
@@ -210,7 +202,6 @@ export default function ScanPage() {
           </p>
         </div>
 
-        {/* Switcher Mode Masuk / Pulang */}
         <div className="flex bg-slate-100 p-1.5 rounded-full mb-6">
           <button
             type="button"
@@ -238,20 +229,17 @@ export default function ScanPage() {
           </button>
         </div>
 
-        {/* Kotak Animasi Scanner */}
         <div className="relative w-full h-56 bg-slate-900 rounded-3xl overflow-hidden shadow-inner flex flex-col items-center justify-center border-4 border-teal-400/50">
           <ScanLine className="w-10 h-10 text-teal-400/40 mb-2" />
           <span className="text-slate-400 text-xs font-medium">
             {loading ? 'Memproses data...' : 'Scanner Siap Membaca NISN...'}
           </span>
 
-          {/* Target Box & Laser Animasi */}
           <div className="absolute w-56 h-32 border-2 border-dashed border-teal-300/80 rounded-2xl flex items-center justify-center overflow-hidden">
             <div className="absolute w-full h-1 bg-red-500 shadow-[0_0_12px_#ef4444] animate-scan-laser"></div>
           </div>
         </div>
 
-        {/* Form Input (Mendukung USB Barcode Scanner & Input Manual Test) */}
         <form onSubmit={handleScanSubmit} className="mt-4">
           <input
             ref={inputRef}
@@ -264,7 +252,6 @@ export default function ScanPage() {
           />
         </form>
 
-        {/* Feedback Result Card */}
         {feedback && (
           <div
             className={`mt-5 p-4 rounded-2xl border transition-all ${
@@ -293,7 +280,9 @@ export default function ScanPage() {
                     {feedback.badge}
                   </span>
                   <h3 className="font-bold text-slate-900 mt-1">{feedback.student.full_name}</h3>
-                  <p className="text-xs text-slate-600">{feedback.student.classes?.class_name || '-'}</p>
+                  <p className="text-xs text-slate-600">
+                    {feedback.student.classes ? `${feedback.student.classes.class_name} (${feedback.student.classes.major})` : '-'}
+                  </p>
                   <p className="text-[11px] text-teal-700 font-medium mt-0.5">
                     {feedback.time} • {feedback.note}
                   </p>
@@ -315,7 +304,6 @@ export default function ScanPage() {
           </div>
         )}
 
-        {/* Footer Info Jam */}
         <div className="mt-6 text-center border-t border-slate-100 pt-4 text-[11px] text-slate-500">
           Batas Masuk: <strong className="text-slate-700">07.30</strong> • Pulang Sen–Kam:{' '}
           <strong className="text-slate-700">16.30</strong> • Jumat: <strong className="text-slate-700">11.30</strong>
