@@ -137,8 +137,8 @@ export default function DashboardPage() {
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-md">
               <Users className="w-6 h-6" />
             </div>
-            <span className="font-bold text-slate-800 text-sm">Data Kelas & Siswa</span>
-            <span className="text-[11px] text-slate-500 mt-0.5">CRUD & Cetak Kartu NISN</span>
+            <span className="font-bold text-slate-800 text-sm">Data Siswa</span>
+            <span className="text-[11px] text-slate-500 mt-0.5">CRUD, Impor & Cetak Kartu</span>
           </Link>
 
           <Link href="/rekap" className="bg-white/95 backdrop-blur-md p-5 rounded-3xl shadow-md hover:shadow-xl transition-all border border-blue-50 flex flex-col items-center text-center group">

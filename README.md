@@ -3,6 +3,5 @@
 Aplikasi web absensi siswa berbasis scan barcode NISN menggunakan Next.js, Tailwind CSS, dan Supabase (siap deploy di Vercel).
 
 ## Update Terbaru:
-1. **Autentikasi Admin:** Halaman *Izin & Piket*, *Kelas & Siswa*, serta *Rekap Laporan* dikunci dengan password admin (`admin123`).
-2. **Atribut Jurusan pada Kelas:** Saat menambah kelas, kini dilengkapi pilihan Jurusan (DKV, MM, TAV, TKJ, TBSM).
-3. **Template Excel Siswa:** Tombol unduh template Excel otomatis tersedia di menu Master Siswa untuk memudahkan impor data massal.
+1. **Penyederhanaan Menu Master Siswa:** Menu "Tambah Kelas Baru" telah dihapus sepenuhnya.
+2. **Alur Impor & Input Siswa:** Ditambahkan pemilih **Jurusan** dan **Kelas** di bagian atas sebelum pengguna mengupload file Excel/CSV atau menambah data siswa satuan.

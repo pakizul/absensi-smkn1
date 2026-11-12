@@ -158,7 +158,7 @@ export default function RekapPage() {
 
             {reportType === 'bulanan' && (
               <div>
-                <label className="block text-xs font-bold text-slate-500 multicoll mb-1">Pilih Bulan</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Pilih Bulan</label>
                 <input
                   type="month"
                   value={selectedMonth}

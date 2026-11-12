@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ScanLine, ClipboardCheck, Users, FileSpreadsheet, Lock, Unlock } from 'lucide-react';
+import { LayoutDashboard, ScanLine, ClipboardCheck, Users, FileSpreadsheet } from 'lucide-react';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -10,7 +10,7 @@ export default function Navbar() {
     { href: '/', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
     { href: '/scan', label: 'Scan Barcode', icon: ScanLine, adminOnly: false },
     { href: '/izin', label: 'Izin & Piket', icon: ClipboardCheck, adminOnly: true },
-    { href: '/master', label: 'Kelas & Siswa', icon: Users, adminOnly: true },
+    { href: '/master', label: 'Data Siswa', icon: Users, adminOnly: true },
     { href: '/rekap', label: 'Rekap Laporan', icon: FileSpreadsheet, adminOnly: true },
   ];
 

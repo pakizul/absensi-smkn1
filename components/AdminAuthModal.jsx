@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Lock, ShieldCheck, KeyRound } from 'lucide-react';
+import { Lock, KeyRound } from 'lucide-react';
 
 export default function AdminAuthModal({ onAuthenticated }) {
   const [password, setPassword] = useState('');
@@ -17,7 +17,6 @@ export default function AdminAuthModal({ onAuthenticated }) {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    // Password default admin
     if (password === 'admin123') {
       sessionStorage.setItem('admin_auth_smkn1', 'true');
       setIsAuth(true);
