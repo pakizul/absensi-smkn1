@@ -3,17 +3,21 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import AdminAuthModal from '../../components/AdminAuthModal';
 import * as XLSX from 'xlsx';
-import { Trash2, Edit2, Printer, Upload, Download } from 'lucide-react';
+import { Trash2, Edit2, Printer, Upload, Download, Users, UserPlus, Search } from 'lucide-react';
 
 export default function MasterDataPage() {
   const [isAdmin, setIsAdmin] = useState(false);
+  const [activeTab, setActiveTab] = useState('list'); // 'list' (Lihat Siswa Kelas) or 'add' (Tambah/Impor Siswa)
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
 
+  // Filter untuk Manajemen / Lihat Siswa
   const [selectedGradeFilter, setSelectedGradeFilter] = useState('X');
   const [selectedMajorFilter, setSelectedMajorFilter] = useState('DKV');
   const [targetClassId, setTargetClassId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
+  // Form Satuan Siswa
   const [nisn, setNisn] = useState('');
   const [fullName, setFullName] = useState('');
   const [parentPhone, setParentPhone] = useState('');
@@ -26,11 +30,9 @@ export default function MasterDataPage() {
   }, [isAdmin]);
 
   async function fetchMaster() {
-    // 1. Fetch classes from Supabase
     let { data: cls, error: clsErr } = await supabase.from('classes').select('*').order('class_name');
     
     if (clsErr || !cls || cls.length === 0) {
-      // Insert default required classes so Supabase generates valid UUIDs
       const defaultClasses = [
         { class_name: 'X DKV 1', major: 'DKV', grade: 'X' },
         { class_name: 'X DKV 2', major: 'DKV', grade: 'X' },
@@ -50,18 +52,20 @@ export default function MasterDataPage() {
         { class_name: 'XII TKR 2', major: 'TKR', grade: 'XII' },
       ];
       
-      await supabase.from('classes').upsert(defaultClasses, { onConflict: 'class_name' });
-      
-      // Re-fetch to get real UUIDs from Supabase
-      const { data: refetchedCls } = await supabase.from('classes').select('*').order('class_name');
-      cls = refetchedCls || [];
+      const { data: insertedCls, error: insErr } = await supabase.from('classes').upsert(defaultClasses, { onConflict: 'class_name' }).select('*');
+      if (!insErr && insertedCls) {
+        cls = insertedCls;
+      } else {
+        const { data: refetchedCls } = await supabase.from('classes').select('*').order('class_name');
+        cls = refetchedCls || [];
+      }
     }
 
     setClasses(cls);
 
     const { data: st } = await supabase
       .from('students')
-      .select('*, classes(class_name, major)')
+      .select('*, classes(id, class_name, major, grade)')
       .eq('status', 'active')
       .order('full_name');
     
@@ -74,6 +78,16 @@ export default function MasterDataPage() {
     const matchMajor = (c.major || '').toUpperCase() === selectedMajorFilter.toUpperCase();
     const matchGrade = (c.class_name || '').toUpperCase().startsWith(selectedGradeFilter.toUpperCase());
     return matchMajor && matchGrade;
+  });
+
+  // Filter siswa berdasarkan tab aktif dan pencarian/kelas
+  const displayedStudents = students.filter(st => {
+    const matchSearch = (st.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        (st.nisn || '').toLowerCase().includes(searchQuery.toLowerCase());
+    if (activeTab === 'list' && targetClassId) {
+      return matchSearch && st.class_id === targetClassId;
+    }
+    return matchSearch;
   });
 
   async function handleSaveStudent(e) {
@@ -101,20 +115,22 @@ export default function MasterDataPage() {
         })
         .eq('nisn', nisn.trim());
       if (error) {
-        alert('Gagal memperbarui siswa ke Supabase: ' + error.message);
+        alert('Gagal memperbarui siswa: ' + error.message);
         return;
       }
+      alert('Data siswa berhasil diperbarui!');
     } else {
       const { error } = await supabase.from('students').upsert([payload], { onConflict: 'nisn' });
       if (error) {
-        alert('Gagal menyimpan siswa ke Supabase: ' + error.message);
+        alert('Gagal menyimpan siswa: ' + error.message);
         return;
       }
+      alert('Data siswa berhasil disimpan ke database!');
     }
 
     resetStudentForm();
     await fetchMaster();
-    alert('Data siswa berhasil disimpan ke database Supabase!');
+    setActiveTab('list');
   }
 
   function handleEditStudent(st) {
@@ -129,6 +145,7 @@ export default function MasterDataPage() {
     setTargetClassId(st.class_id || '');
     setParentPhone(st.parent_phone || '');
     setIsEditing(true);
+    setActiveTab('add'); // Pindah ke tab form untuk update data
   }
 
   async function handleDeleteStudent(targetNisn) {
@@ -163,7 +180,7 @@ export default function MasterDataPage() {
     if (!file) return;
 
     if (!targetClassId) {
-      alert('Pilih Tingkat, Jurusan, dan Kelas tujuan terlebih dahulu sebelum mengupload data siswa!');
+      alert('Pilih Tingkat, Jurusan, dan Kelas tujuan terlebih dahulu!');
       e.target.value = '';
       return;
     }
@@ -190,11 +207,12 @@ export default function MasterDataPage() {
           if (error) {
             alert('Gagal mengimpor ke Supabase: ' + error.message);
           } else {
-            alert(`Berhasil! ${payload.length} data siswa telah tersimpan dan disinkronkan ke database Supabase.`);
+            alert(`Berhasil! ${payload.length} data siswa telah disinkronkan ke database.`);
             await fetchMaster();
+            setActiveTab('list');
           }
         } else {
-          alert('Format kolom file Excel tidak dikenali. Pastikan terdapat kolom header "NISN" dan "Nama Lengkap".');
+          alert('Format kolom file Excel tidak dikenali. Pastikan terdapat kolom "NISN" dan "Nama Lengkap".');
         }
       } catch (err) {
         alert('Terjadi kesalahan membaca file Excel: ' + err.message);
@@ -209,200 +227,166 @@ export default function MasterDataPage() {
       <AdminAuthModal onAuthenticated={() => setIsAdmin(true)} />
       {isAdmin && (
         <div className="max-w-7xl mx-auto px-4 sm:px-8 py-8">
-          <h1 className="text-2xl font-bold text-slate-900 mb-6">Manajemen Data Siswa</h1>
-
-          <div className="space-y-6">
-            {/* Panel Pilihan Tingkat, Jurusan & Kelas untuk Impor / Input */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-blue-100">
-              <h2 className="font-bold text-slate-800 mb-2">Pilih Tingkat, Jurusan & Kelas Tujuan</h2>
-              <p className="text-xs text-slate-500 mb-4">
-                Tentukan Tingkat Kelas (X, XI, XII) dan Jurusan (DKV, TKJ, TKR) terlebih dahulu sebelum mengupload file Excel/CSV atau menambah data siswa ke database Supabase.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Pilih Tingkat Kelas</label>
-                  <select
-                    value={selectedGradeFilter}
-                    onChange={(e) => {
-                      setSelectedGradeFilter(e.target.value);
-                      setTargetClassId('');
-                    }}
-                    className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="X">Kelas X</option>
-                    <option value="XI">Kelas XI</option>
-                    <option value="XII">Kelas XII</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Pilih Jurusan</label>
-                  <select
-                    value={selectedMajorFilter}
-                    onChange={(e) => {
-                      setSelectedMajorFilter(e.target.value);
-                      setTargetClassId('');
-                    }}
-                    className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="DKV">Desain Komunikasi Visual (DKV)</option>
-                    <option value="TKJ">Teknik Komputer & Jaringan (TKJ)</option>
-                    <option value="TKR">Teknik Kendaraan Ringan (TKR)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Pilih Kelas</label>
-                  <select
-                    value={targetClassId}
-                    onChange={(e) => setTargetClassId(e.target.value)}
-                    required
-                    className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="">-- Pilih Kelas --</option>
-                    {filteredClasses.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.class_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Manajemen Data Siswa</h1>
+              <p className="text-xs text-slate-500">Kelola data siswa, lihat daftar per kelas, update data, dan impor Excel.</p>
             </div>
 
-            {/* Form Tambah/Edit Satuan Siswa */}
+            {/* Navigasi Tab */}
+            <div className="flex bg-slate-200/70 p-1 rounded-full">
+              <button
+                onClick={() => setActiveTab('list')}
+                className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs font-bold transition-all ${activeTab === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Lihat Siswa Kelas</span>
+              </button>
+              <button
+                onClick={() => { setActiveTab('add'); resetStudentForm(); }}
+                className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs font-bold transition-all ${activeTab === 'add' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Tambah & Impor Siswa</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Panel Filter Tingkat, Jurusan & Kelas */}
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-blue-100 mb-6">
+            <h2 className="font-bold text-slate-800 mb-2">Filter Tingkat & Jurusan Kelas</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Pilih Tingkat Kelas</label>
+                <select
+                  value={selectedGradeFilter}
+                  onChange={(e) => {
+                    setSelectedGradeFilter(e.target.value);
+                    setTargetClassId('');
+                  }}
+                  className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
+                >
+                  <option value="X">Kelas X</option>
+                  <option value="XI">Kelas XI</option>
+                  <option value="XII">Kelas XII</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Pilih Jurusan</label>
+                <select
+                  value={selectedMajorFilter}
+                  onChange={(e) => {
+                    setSelectedMajorFilter(e.target.value);
+                    setTargetClassId('');
+                  }}
+                  className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
+                >
+                  <option value="DKV">Desain Komunikasi Visual (DKV)</option>
+                  <option value="TKJ">Teknik Komputer & Jaringan (TKJ)</option>
+                  <option value="TKR">Teknik Kendaraan Ringan (TKR)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Pilih Kelas Spesifik</label>
+                <select
+                  value={targetClassId}
+                  onChange={(e) => setTargetClassId(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500 font-semibold text-blue-600"
+                >
+                  <option value="">-- Semua Kelas dalam Filter --</option>
+                  {filteredClasses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.class_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* TAB 1: LIHAT SISWA KELAS */}
+          {activeTab === 'list' && (
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-              <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
-                <h2 className="font-bold text-slate-800">
-                  {isEditing ? 'Edit Data Siswa' : 'Tambah Siswa Satuan'}
-                </h2>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={downloadTemplate}
-                    className="flex items-center gap-1 px-3.5 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download Template Excel</span>
-                  </button>
-                  <label className={`cursor-pointer flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold ${!targetClassId ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}>
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Upload Excel / CSV Siswa</span>
-                    <input 
-                      type="file" 
-                      accept=".csv, .xlsx, .xls" 
-                      onChange={handleExcelUpload} 
-                      disabled={!targetClassId} 
-                      className="hidden" 
-                    />
-                  </label>
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+                <div>
+                  <h2 className="font-bold text-slate-800 text-lg">Daftar Siswa Kelas</h2>
+                  <p className="text-xs text-slate-500">Menampilkan siswa aktif berdasarkan filter kelas atau pencarian nama/NISN.</p>
+                </div>
+                <div className="relative w-full sm:w-72">
+                  <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Cari nama atau NISN..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 rounded-full bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-blue-500"
+                  />
                 </div>
               </div>
 
-              {!targetClassId && (
-                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-700">
-                  ⚠️ Silakan pilih <b>Tingkat</b>, <b>Jurusan</b>, dan <b>Kelas</b> di panel atas terlebih dahulu sebelum menginput atau mengupload data siswa.
-                </div>
-              )}
-
-              <form onSubmit={handleSaveStudent} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <input
-                  type="text"
-                  placeholder="NISN (Kode Barcode)"
-                  value={nisn}
-                  onChange={(e) => setNisn(e.target.value)}
-                  disabled={isEditing}
-                  required
-                  className="px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm disabled:opacity-60"
-                />
-                <input
-                  type="text"
-                  placeholder="Nama Lengkap Siswa"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                  className="px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm"
-                />
-                <input
-                  type="text"
-                  placeholder="No. WhatsApp Orang Tua"
-                  value={parentPhone}
-                  onChange={(e) => setParentPhone(e.target.value)}
-                  className="px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm"
-                />
-
-                <div className="sm:col-span-3 flex gap-2 mt-1">
-                  <button
-                    type="submit"
-                    disabled={!targetClassId}
-                    className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-blue-600 to-teal-500 text-white font-bold text-sm disabled:opacity-50"
-                  >
-                    {isEditing ? 'Perbarui Data Siswa' : 'Simpan Siswa ke Kelas Terpilih'}
-                  </button>
-                  {isEditing && (
-                    <button
-                      type="button"
-                      onClick={resetStudentForm}
-                      className="px-5 py-2.5 rounded-full bg-slate-200 text-slate-700 font-bold text-sm"
-                    >
-                      Batal
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
-
-            {/* Tabel Daftar Siswa */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-              <h2 className="font-bold text-slate-800 mb-4">Daftar Siswa Aktif di Database ({students.length})</h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-100 text-xs text-slate-400">
-                      <th className="py-2.5 px-3">NISN</th>
-                      <th className="py-2.5 px-3">Nama Lengkap</th>
-                      <th className="py-2.5 px-3">Kelas & Jurusan</th>
-                      <th className="py-2.5 px-3 text-right">Aksi</th>
+                      <th className="py-3 px-3">NISN</th>
+                      <th className="py-3 px-3">Nama Lengkap</th>
+                      <th className="py-3 px-3">Kelas & Jurusan</th>
+                      <th className="py-3 px-3">No. HP Orang Tua</th>
+                      <th className="py-3 px-3 text-right">Aksi / Update</th>
                     </tr>
                   </thead>
                   <tbody className="text-sm divide-y divide-slate-50">
-                    {students.length === 0 ? (
+                    {displayedStudents.length === 0 ? (
                       <tr>
-                        <td colSpan="4" className="py-8 text-center text-xs text-slate-400">
-                          Belum ada data siswa di database Supabase. Silakan upload file Excel atau tambah siswa baru.
+                        <td colSpan="5" className="py-12 text-center text-xs text-slate-400">
+                          Tidak ada data siswa yang ditemukan pada kelas atau pencarian ini.
                         </td>
                       </tr>
                     ) : (
-                      students.map((st) => (
+                      displayedStudents.map((st) => (
                         <tr key={st.nisn} className="hover:bg-slate-50">
-                          <td className="py-3 px-3 font-mono text-xs">{st.nisn}</td>
-                          <td className="py-3 px-3 font-semibold text-slate-800">{st.full_name}</td>
-                          <td className="py-3 px-3 text-xs text-slate-500">
-                            {st.classes ? `${st.classes.class_name} (${st.classes.major})` : '-'}
+                          <td className="py-3.5 px-3 font-mono text-xs font-bold text-slate-600">{st.nisn}</td>
+                          <td className="py-3.5 px-3 font-semibold text-slate-900">{st.full_name}</td>
+                          <td className="py-3.5 px-3 text-xs">
+                            <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-bold">
+                              {st.classes ? `${st.classes.class_name}` : '-'}
+                            </span>
                           </td>
-                          <td className="py-3 px-3 flex justify-end gap-1">
+                          <td className="py-3.5 px-3 text-xs text-slate-600">{st.parent_phone || '-'}</td>
+                          <td className="py-3.5 px-3 flex justify-end items-center gap-2 relative">
                             <button
                               onClick={() => setPrintStudent(st)}
                               title="Lihat / Cetak Barcode NISN"
-                              className="p-2 text-teal-600 hover:bg-teal-50 rounded-full"
+                              className="p-2 text-teal-600 hover:bg-teal-50 rounded-full transition-colors"
                             >
                               <Printer className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => handleEditStudent(st)}
-                              title="Edit"
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-full"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteStudent(st.nisn)}
-                              title="Hapus"
-                              className="p-2 text-rose-500 hover:bg-rose-50 rounded-full"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+
+                            {/* Dropdown / Tombol Update yang berisi Edit dan Hapus */}
+                            <details className="relative group">
+                              <summary className="list-none cursor-pointer px-3.5 py-1.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs flex items-center gap-1.5 shadow-sm">
+                                <Edit2 className="w-3.5 h-3.5" />
+                                <span>Update ▾</span>
+                              </summary>
+                              <div className="absolute right-0 mt-2 w-36 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-20 flex flex-col">
+                                <button
+                                  onClick={() => handleEditStudent(st)}
+                                  className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Edit Data</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteStudent(st.nisn)}
+                                  className="w-full text-left px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 border-t border-slate-50"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                                  <span>Hapus</span>
+                                </button>
+                              </div>
+                            </details>
                           </td>
                         </tr>
                       ))
@@ -411,7 +395,103 @@ export default function MasterDataPage() {
                 </table>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* TAB 2: TAMBAH & UPDATE DATA / IMPOR EXCEL */}
+          {activeTab === 'add' && (
+            <div className="space-y-6">
+              {/* Form Tambah / Update Satuan Siswa */}
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+                  <h2 className="font-bold text-slate-800 text-lg">
+                    {isEditing ? 'Update Data Siswa' : 'Tambah Siswa Satuan'}
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={downloadTemplate}
+                      className="flex items-center gap-1 px-3.5 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download Template Excel</span>
+                    </button>
+                    <label className={`cursor-pointer flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold ${!targetClassId ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}>
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Excel / CSV Siswa</span>
+                      <input 
+                        type="file" 
+                        accept=".csv, .xlsx, .xls" 
+                        onChange={handleExcelUpload} 
+                        disabled={!targetClassId} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {!targetClassId && (
+                  <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-700">
+                    ⚠️ Silakan pilih <b>Kelas Spesifik</b> pada panel filter di atas terlebih dahulu sebagai tujuan penyimpanan siswa.
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveStudent} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">NISN (Kode Barcode)</label>
+                    <input
+                      type="text"
+                      placeholder="Masukkan NISN siswa..."
+                      value={nisn}
+                      onChange={(e) => setNisn(e.target.value)}
+                      disabled={isEditing}
+                      required
+                      className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm disabled:opacity-60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Lengkap Siswa</label>
+                    <input
+                      type="text"
+                      placeholder="Masukkan nama lengkap..."
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      required
+                      className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">No. WhatsApp Orang Tua</label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: 08123456789"
+                      value={parentPhone}
+                      onChange={(e) => setParentPhone(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3 flex gap-2 mt-2">
+                    <button
+                      type="submit"
+                      disabled={!targetClassId}
+                      className="flex-1 py-3 rounded-full bg-gradient-to-r from-blue-600 to-teal-500 text-white font-bold text-sm shadow-md disabled:opacity-50"
+                    >
+                      {isEditing ? 'Perbarui / Update Data Siswa' : 'Simpan Siswa Baru ke Database'}
+                    </button>
+                    {isEditing && (
+                      <button
+                        type="button"
+                        onClick={() => { resetStudentForm(); setActiveTab('list'); }}
+                        className="px-6 py-3 rounded-full bg-slate-200 text-slate-700 font-bold text-sm"
+                      >
+                        Batal
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
           {printStudent && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -422,7 +502,7 @@ export default function MasterDataPage() {
                   <div className="bg-white text-slate-900 rounded-xl p-4 mt-4">
                     <p className="font-bold text-sm">{printStudent.full_name}</p>
                     <p className="text-xs text-slate-500 mb-3">
-                      {printStudent.classes ? `${printStudent.classes.image ? '' : printStudent.classes.class_name} (${printStudent.classes.major})` : '-'}
+                      {printStudent.classes ? `${printStudent.classes.class_name} (${printStudent.classes.major})` : '-'}
                     </p>
                     <img
                       src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${printStudent.nisn}&scale=2&height=10&includetext`}

@@ -1,23 +1,24 @@
 export default function Footer() {
   return (
-    <footer className="no-print bg-white/80 backdrop-blur-md border-t border-slate-100 py-6 px-4 mt-auto">
-      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 flex items-center justify-center p-1 shadow-sm">
+    <footer className="no-print bg-slate-900 border-t border-slate-800 py-6 px-4 mt-auto">
+      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+        {/* Banner Logo Memanjang */}
+        <div className="w-full md:w-auto flex-1 max-w-xl">
+          <div className="w-full bg-black rounded-xl overflow-hidden border border-slate-800 p-2 shadow-inner flex items-center justify-center">
             <img 
               src="/images/logo_footer.jpg" 
-              alt="Logo Ampat Studio & SMKN 1 Simpang Empat" 
-              className="w-full h-full object-contain"
+              alt="Logo Instansi & Ampat Studio" 
+              className="w-full h-12 md:h-14 object-contain"
             />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-slate-800">Sistem Kehadiran Siswa • SMKN 1 Simpang Empat</p>
-            <p className="text-[11px] text-slate-500">Kabupaten Banjar, Kalimantan Selatan</p>
           </div>
         </div>
         
-        <div className="text-xs text-slate-600 font-medium">
-          Design by <span className="font-bold text-teal-600">ampat studio</span>
+        {/* Keterangan */}
+        <div className="flex flex-col md:items-end text-center md:text-right">
+          <p className="text-xs font-bold text-slate-300">Sistem Kehadiran Siswa • SMKN 1 Simpang Empat</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Design by <span className="font-bold text-teal-400">ampat studio</span>
+          </p>
         </div>
       </div>
     </footer>
