@@ -26,9 +26,11 @@ export default function MasterDataPage() {
   }, [isAdmin]);
 
   async function fetchMaster() {
+    // 1. Fetch classes from Supabase
     let { data: cls, error: clsErr } = await supabase.from('classes').select('*').order('class_name');
     
     if (clsErr || !cls || cls.length === 0) {
+      // Insert default required classes so Supabase generates valid UUIDs
       const defaultClasses = [
         { class_name: 'X DKV 1', major: 'DKV', grade: 'X' },
         { class_name: 'X DKV 2', major: 'DKV', grade: 'X' },
@@ -48,17 +50,16 @@ export default function MasterDataPage() {
         { class_name: 'XII TKR 2', major: 'TKR', grade: 'XII' },
       ];
       
-      const { data: insertedCls, error: insErr } = await supabase.from('classes').upsert(defaultClasses, { onConflict: 'class_name' }).select('*');
-      if (!insErr && insertedCls) {
-        cls = insertedCls;
-      } else {
-        cls = defaultClasses.map((c, i) => ({ id: String(i + 1), ...c }));
-      }
+      await supabase.from('classes').upsert(defaultClasses, { onConflict: 'class_name' });
+      
+      // Re-fetch to get real UUIDs from Supabase
+      const { data: refetchedCls } = await supabase.from('classes').select('*').order('class_name');
+      cls = refetchedCls || [];
     }
 
-    setClasses(cls || []);
+    setClasses(cls);
 
-    const { data: st, error: stErr } = await supabase
+    const { data: st } = await supabase
       .from('students')
       .select('*, classes(class_name, major)')
       .eq('status', 'active')
@@ -417,11 +418,11 @@ export default function MasterDataPage() {
               <div className="bg-white rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl">
                 <div className="bg-gradient-to-br from-blue-600 to-emerald-400 text-white p-5 rounded-2xl">
                   <p className="text-[10px] font-bold tracking-wider uppercase">Kartu Pelajar Digital</p>
-                  <h3 className="h3 font-bold text-base mt-0.5">SMKN 1 SIMPANG EMPAT</h3>
+                  <h3 className="font-bold text-base mt-0.5">SMKN 1 SIMPANG EMPAT</h3>
                   <div className="bg-white text-slate-900 rounded-xl p-4 mt-4">
                     <p className="font-bold text-sm">{printStudent.full_name}</p>
                     <p className="text-xs text-slate-500 mb-3">
-                      {printStudent.classes ? `${printStudent.classes.class_name} (${printStudent.classes.major})` : '-'}
+                      {printStudent.classes ? `${printStudent.classes.image ? '' : printStudent.classes.class_name} (${printStudent.classes.major})` : '-'}
                     </p>
                     <img
                       src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${printStudent.nisn}&scale=2&height=10&includetext`}
