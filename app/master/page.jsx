@@ -79,7 +79,10 @@ export default function MasterDataPage() {
 
   const filteredClasses = classes.filter(c => {
     const matchMajor = (c.major || '').toUpperCase() === selectedMajorFilter.toUpperCase();
-    const matchGrade = (c.grade || c.class_name || '').toUpperCase().includes(selectedGradeFilter.toUpperCase());
+    // Cocokkan grade secara tepat (misal: 'X' tidak boleh match 'XI' atau 'XII')
+    const firstWord = (c.class_name || '').trim().split(' ')[0].toUpperCase();
+    const matchGrade = (c.grade || '').toUpperCase() === selectedGradeFilter.toUpperCase() || 
+                       firstWord === selectedGradeFilter.toUpperCase();
     return matchMajor && matchGrade;
   });
 
