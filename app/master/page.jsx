@@ -6,22 +6,22 @@ import * as XLSX from 'xlsx';
 import { Trash2, Edit2, Printer, Upload, Download, Users, UserPlus, Search } from 'lucide-react';
 
 const DEFAULT_CLASSES = [
-  { id: 'uuid-x-dkv-1', class_name: 'X DKV 1', major: 'DKV', grade: 'X' },
-  { id: 'uuid-x-dkv-2', class_name: 'X DKV 2', major: 'DKV', grade: 'X' },
-  { id: 'uuid-x-tkj-1', class_name: 'X TKJ 1', major: 'TKJ', grade: 'X' },
-  { id: 'uuid-x-tkj-2', class_name: 'X TKJ 2', major: 'TKJ', grade: 'X' },
-  { id: 'uuid-x-tkr-1', class_name: 'X TKR 1', major: 'TKR', grade: 'X' },
-  { id: 'uuid-x-tkr-2', class_name: 'X TKR 2', major: 'TKR', grade: 'X' },
-  { id: 'uuid-xi-dkv', class_name: 'XI DKV', major: 'DKV', grade: 'XI' },
-  { id: 'uuid-xi-tkj-1', class_name: 'XI TKJ 1', major: 'TKJ', grade: 'XI' },
-  { id: 'uuid-xi-tkj-2', class_name: 'XI TKJ 2', major: 'TKJ', grade: 'XI' },
-  { id: 'uuid-xi-tkr-1', class_name: 'XI TKR 1', major: 'TKR', grade: 'XI' },
-  { id: 'uuid-xi-tkr-2', class_name: 'XI TKR 2', major: 'TKR', grade: 'XI' },
-  { id: 'uuid-xii-dkv', class_name: 'XII DKV', major: 'DKV', grade: 'XII' },
-  { id: 'uuid-xii-tkj-1', class_name: 'XII TKJ 1', major: 'TKJ', grade: 'XII' },
-  { id: 'uuid-xii-tkj-2', class_name: 'XII TKJ 2', major: 'TKJ', grade: 'XII' },
-  { id: 'uuid-xii-tkr-1', class_name: 'XII TKR 1', major: 'TKR', grade: 'XII' },
-  { id: 'uuid-xii-tkr-2', class_name: 'XII TKR 2', major: 'TKR', grade: 'XII' },
+  { id: 'ea807969-7ce9-4a55-8600-16c6d4d5db12', class_name: 'X DKV 1', major: 'DKV', grade: 'X' },
+  { id: '2895fb1b-9b46-448e-ac1c-17bc5786e899', class_name: 'X DKV 2', major: 'DKV', grade: 'X' },
+  { id: 'cbb52f10-d98e-4d66-951b-edc76df0fe90', class_name: 'X TKJ 1', major: 'TKJ', grade: 'X' },
+  { id: '6695e73c-43f6-47e0-9889-4316cd27ca4f', class_name: 'X TKJ 2', major: 'TKJ', grade: 'X' },
+  { id: '37e2c373-8b01-429f-99ec-fd579120970b', class_name: 'X TKR 1', major: 'TKR', grade: 'X' },
+  { id: '05bee0fd-ffe2-4daf-87bc-5ed49c964912', class_name: 'X TKR 2', major: 'TKR', grade: 'X' },
+  { id: '9a487ca8-ca97-4bca-80e2-b3143f4e8481', class_name: 'XI DKV', major: 'DKV', grade: 'XI' },
+  { id: 'db90fe03-9d3f-45a8-ad90-43455f9eaaf8', class_name: 'XI TKJ 1', major: 'TKJ', grade: 'XI' },
+  { id: '928285f7-7bb0-4053-aff7-53509d94d206', class_name: 'XI TKJ 2', major: 'TKJ', grade: 'XI' },
+  { id: '4734800c-4dc3-44a8-ab8d-7e35439f93ab', class_name: 'XI TKR 1', major: 'TKR', grade: 'XI' },
+  { id: '9eb0822b-0902-451f-bac8-4d7078f50dfa', class_name: 'XI TKR 2', major: 'TKR', grade: 'XI' },
+  { id: 'ff02546e-8742-4702-9482-de460e95ccd6', class_name: 'XII DKV', major: 'DKV', grade: 'XII' },
+  { id: 'ac770f8e-74ea-46b6-b24d-12562d617e1b', class_name: 'XII TKJ 1', major: 'TKJ', grade: 'XII' },
+  { id: '6720a523-95b0-48ba-b5a6-32bb8e2a19a4', class_name: 'XII TKJ 2', major: 'TKJ', grade: 'XII' },
+  { id: '68a4a532-2624-48b6-8105-05351024b217', class_name: 'XII TKR 1', major: 'TKR', grade: 'XII' },
+  { id: '630e012a-6837-4bac-a336-00556ee9e536', class_name: 'XII TKR 2', major: 'TKR', grade: 'XII' },
 ];
 
 export default function MasterDataPage() {
