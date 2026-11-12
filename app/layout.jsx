@@ -1,5 +1,6 @@
 import './globals.css';
 import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
 
 export const metadata = {
   title: 'Sistem Kehadiran Siswa - SMKN 1 Simpang Empat',
@@ -12,6 +13,7 @@ export default function RootLayout({ children }) {
       <body className="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
         <Navbar />
         <main className="flex-1">{children}</main>
+        <Footer />
       </body>
     </html>
   );

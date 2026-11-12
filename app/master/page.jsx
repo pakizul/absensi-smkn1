@@ -10,7 +10,8 @@ export default function MasterDataPage() {
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
 
-  // Form Filter Impor / Input Siswa Berdasarkan Jurusan & Kelas
+  // Form Filter Impor / Input Siswa Berdasarkan Tingkat & Jurusan
+  const [selectedGradeFilter, setSelectedGradeFilter] = useState('X');
   const [selectedMajorFilter, setSelectedMajorFilter] = useState('DKV');
   const [targetClassId, setTargetClassId] = useState('');
 
@@ -28,7 +29,28 @@ export default function MasterDataPage() {
 
   async function fetchMaster() {
     const { data: cls } = await supabase.from('classes').select('*').order('class_name');
-    if (cls) setClasses(cls);
+    if (cls && cls.length > 0) {
+      setClasses(cls);
+    } else {
+      setClasses([
+        { id: '1', class_name: 'X DKV 1', major: 'DKV', grade: 'X' },
+        { id: '2', class_name: 'X DKV 2', major: 'DKV', grade: 'X' },
+        { id: '3', class_name: 'X TKJ 1', major: 'TKJ', grade: 'X' },
+        { id: '4', class_name: 'X TKJ 2', major: 'TKJ', grade: 'X' },
+        { id: '5', class_name: 'X TKR 1', major: 'TKR', grade: 'X' },
+        { id: '6', class_name: 'X TKR 2', major: 'TKR', grade: 'X' },
+        { id: '7', class_name: 'XI DKV', major: 'DKV', grade: 'XI' },
+        { id: '8', class_name: 'XI TKJ 1', major: 'TKJ', grade: 'XI' },
+        { id: '9', class_name: 'XI TKJ 2', major: 'TKJ', grade: 'XI' },
+        { id: '10', class_name: 'XI TKR 1', major: 'TKR', grade: 'XI' },
+        { id: '11', class_name: 'XI TKR 2', major: 'TKR', grade: 'XI' },
+        { id: '12', class_name: 'XII DKV', major: 'DKV', grade: 'XII' },
+        { id: '13', class_name: 'XII TKJ 1', major: 'TKJ', grade: 'XII' },
+        { id: '14', class_name: 'XII TKJ 2', major: 'TKJ', grade: 'XII' },
+        { id: '15', class_name: 'XII TKR 1', major: 'TKR', grade: 'XII' },
+        { id: '16', class_name: 'XII TKR 2', major: 'TKR', grade: 'XII' },
+      ]);
+    }
 
     const { data: st } = await supabase
       .from('students')
@@ -38,13 +60,17 @@ export default function MasterDataPage() {
     if (st) setStudents(st);
   }
 
-  // Filter kelas sesuai pilihan jurusan
-  const filteredClasses = classes.filter(c => c.major === selectedMajorFilter);
+  // Filter kelas sesuai tingkat (X, XI, XII) dan jurusan (DKV, TKJ, TKR)
+  const filteredClasses = classes.filter(c => {
+    const matchMajor = c.major === selectedMajorFilter;
+    const matchGrade = c.class_name.toUpperCase().startsWith(selectedGradeFilter.toUpperCase());
+    return matchMajor && matchGrade;
+  });
 
   async function handleSaveStudent(e) {
     e.preventDefault();
     if (!nisn || !fullName || !targetClassId) {
-      alert('Mohon pilih Jurusan, Kelas, serta lengkapi NISN dan Nama Siswa.');
+      alert('Mohon pilih Tingkat, Jurusan, Kelas, serta lengkapi NISN dan Nama Siswa.');
       return;
     }
 
@@ -77,6 +103,11 @@ export default function MasterDataPage() {
     setNisn(st.nisn);
     setFullName(st.full_name);
     if (st.classes?.major) setSelectedMajorFilter(st.classes.major);
+    if (st.classes?.class_name) {
+      if (st.classes.class_name.startsWith('X ')) setSelectedGradeFilter('X');
+      else if (st.classes.class_name.startsWith('XI ')) setSelectedGradeFilter('XI');
+      else if (st.classes.class_name.startsWith('XII ')) setSelectedGradeFilter('XII');
+    }
     setTargetClassId(st.class_id || '');
     setParentPhone(st.parent_phone || '');
     setIsEditing(true);
@@ -95,7 +126,6 @@ export default function MasterDataPage() {
     setIsEditing(false);
   }
 
-  // Download Template Excel/CSV Siswa
   function downloadTemplate() {
     const templateData = [
       { NISN: "1234567890", "Nama Lengkap": "Contoh Siswa", "No. HP Orang Tua": "081234567890" }
@@ -111,7 +141,7 @@ export default function MasterDataPage() {
     if (!file) return;
 
     if (!targetClassId) {
-      alert('Pilih Jurusan dan Kelas tujuan terlebih dahulu sebelum mengupload data siswa!');
+      alert('Pilih Tingkat, Jurusan, dan Kelas tujuan terlebih dahulu sebelum mengupload data siswa!');
       e.target.value = '';
       return;
     }
@@ -152,14 +182,30 @@ export default function MasterDataPage() {
           <h1 className="text-2xl font-bold text-slate-900 mb-6">Manajemen Data Siswa</h1>
 
           <div className="space-y-6">
-            {/* Panel Pilihan Jurusan & Kelas untuk Impor / Input */}
+            {/* Panel Pilihan Tingkat, Jurusan & Kelas untuk Impor / Input */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-blue-100">
-              <h2 className="font-bold text-slate-800 mb-2">Pilih Jurusan & Kelas Tujuan</h2>
+              <h2 className="font-bold text-slate-800 mb-2">Pilih Tingkat, Jurusan & Kelas Tujuan</h2>
               <p className="text-xs text-slate-500 mb-4">
-                Tentukan Jurusan dan Kelas terlebih dahulu sebelum mengupload file Excel/CSV atau menambah data siswa.
+                Tentukan Tingkat Kelas (X, XI, XII) dan Jurusan (DKV, TKJ, TKR) terlebih dahulu sebelum mengupload file Excel/CSV atau menambah data siswa.
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Pilih Tingkat Kelas</label>
+                  <select
+                    value={selectedGradeFilter}
+                    onChange={(e) => {
+                      setSelectedGradeFilter(e.target.value);
+                      setTargetClassId('');
+                    }}
+                    className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="X">Kelas X</option>
+                    <option value="XI">Kelas XI</option>
+                    <option value="XII">Kelas XII</option>
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Pilih Jurusan</label>
                   <select
@@ -171,10 +217,8 @@ export default function MasterDataPage() {
                     className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
                   >
                     <option value="DKV">Desain Komunikasi Visual (DKV)</option>
-                    <option value="MM">Multimedia (MM)</option>
-                    <option value="TAV">Teknik Pengolahan Audio Video (TAV)</option>
                     <option value="TKJ">Teknik Komputer & Jaringan (TKJ)</option>
-                    <option value="TBSM">Teknik Bisnis Sepeda Motor (TBSM)</option>
+                    <option value="TKR">Teknik Kendaraan Ringan (TKR)</option>
                   </select>
                 </div>
 
@@ -186,10 +230,10 @@ export default function MasterDataPage() {
                     required
                     className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
                   >
-                    <option value="">-- Pilih Kelas untuk Jurusan Ini --</option>
+                    <option value="">-- Pilih Kelas --</option>
                     {filteredClasses.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.class_name} ({c.major}) - Wali: {c.homeroom_teacher || '-'}
+                        {c.class_name}
                       </option>
                     ))}
                   </select>
@@ -228,7 +272,7 @@ export default function MasterDataPage() {
 
               {!targetClassId && (
                 <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-700">
-                  ⚠️ Silakan pilih <b>Jurusan</b> dan <b>Kelas</b> di panel atas terlebih dahulu sebelum menginput atau mengupload data siswa.
+                  ⚠️ Silakan pilih <b>Tingkat</b>, <b>Jurusan</b>, dan <b>Kelas</b> di panel atas terlebih dahulu sebelum menginput atau mengupload data siswa.
                 </div>
               )}
 
