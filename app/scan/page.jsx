@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { wita, fmtTime } from '../../lib/time';
+import { normalizeNisn } from '../../lib/nisn';
 import { ScanLine, CheckCircle2, AlertCircle, LogOut, RotateCcw, Camera, CameraOff, ImagePlus } from 'lucide-react';
 
 export default function ScanPage() {
@@ -47,7 +48,7 @@ export default function ScanPage() {
 
   // Satu pintu pemrosesan untuk: scanner USB/Bluetooth, ketik manual, kamera HP, dan foto barcode
   const processNisn = async (rawNisn) => {
-    const nisn = String(rawNisn || '').trim();
+    const nisn = normalizeNisn(rawNisn);
     if (!nisn || busyRef.current) return;
 
     busyRef.current = true;

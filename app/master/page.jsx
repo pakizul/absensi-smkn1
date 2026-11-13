@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { normalizeNisn, normalizePhone } from '../../lib/nisn';
 import AdminAuthModal from '../../components/AdminAuthModal';
 import * as XLSX from 'xlsx';
 import { Trash2, Edit2, Printer, Upload, Download, Users, UserPlus, Search } from 'lucide-react';
@@ -105,10 +106,10 @@ export default function MasterDataPage() {
     }
 
     const payload = {
-      nisn: nisn.trim(),
+      nisn: normalizeNisn(nisn),
       full_name: fullName.trim(),
       class_id: targetClassId,
-      parent_phone: parentPhone.trim(),
+      parent_phone: normalizePhone(parentPhone),
       status: 'active',
     };
 
@@ -118,9 +119,9 @@ export default function MasterDataPage() {
         .update({
           full_name: fullName.trim(),
           class_id: targetClassId,
-          parent_phone: parentPhone.trim(),
+          parent_phone: normalizePhone(parentPhone),
         })
-        .eq('nisn', nisn.trim());
+        .eq('nisn', normalizeNisn(nisn));
       if (error) {
         alert('Gagal memperbarui siswa: ' + error.message);
         return;
@@ -175,7 +176,7 @@ export default function MasterDataPage() {
 
   function downloadTemplate() {
     const templateData = [
-      { NISN: "1234567890", "Nama Lengkap": "Contoh Siswa", "No. HP Orang Tua": "081234567890" }
+      { NISN: "0123456789", "Nama Lengkap": "Contoh Siswa", "No. HP Orang Tua": "081234567890" }
     ];
     const worksheet = XLSX.utils.json_to_sheet(templateData);
     const workbook = XLSX.utils.book_new();
@@ -197,16 +198,16 @@ export default function MasterDataPage() {
     reader.onload = async (evt) => {
       try {
         const bstr = evt.target.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wb = XLSX.read(bstr, { type: 'binary', cellText: true });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws);
+        const data = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' }); // raw:false = ambil teks apa adanya (angka 0 di depan tetap)
 
         const payload = data.map((row) => ({
-          nisn: String(row['NISN'] || row['nisn'] || row['Nisn'] || '').trim(),
+          nisn: normalizeNisn(row['NISN'] || row['nisn'] || row['Nisn'] || ''),
           full_name: String(row['Nama Lengkap'] || row['nama lengkap'] || row['Nama'] || row['nama'] || '').trim(),
           class_id: targetClassId,
-          parent_phone: String(row['No. HP Orang Tua'] || row['no hp orang tua'] || row['Telepon'] || row['telepon'] || '').trim(),
+          parent_phone: normalizePhone(row['No. HP Orang Tua'] || row['no hp orang tua'] || row['Telepon'] || row['telepon'] || ''),
           status: 'active',
         })).filter(r => r.nisn && r.full_name);
 
