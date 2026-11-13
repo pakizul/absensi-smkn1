@@ -2,18 +2,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { wita, fmtTime } from '../../lib/time';
-import { ScanLine, CheckCircle2, AlertCircle, LogOut, RotateCcw } from 'lucide-react';
+import { ScanLine, CheckCircle2, AlertCircle, LogOut, RotateCcw, Camera, CameraOff, ImagePlus } from 'lucide-react';
 
 export default function ScanPage() {
   const [nisnInput, setNisnInput] = useState('');
   const [scanMode, setScanMode] = useState('IN');
   const [feedback, setFeedback] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
   const inputRef = useRef(null);
+  const busyRef = useRef(false);      // mencegah dobel proses (scanner & kamera)
+  const processRef = useRef(null);    // selalu menunjuk fungsi proses terbaru
+  const cameraOnRef = useRef(false);
 
   useEffect(() => {
     const focusInput = () => {
-      if (inputRef.current) inputRef.current.focus();
+      if (inputRef.current && !cameraOnRef.current) inputRef.current.focus();
     };
     focusInput();
     document.addEventListener('click', focusInput);
@@ -41,13 +45,13 @@ export default function ScanPage() {
   const dbFail = (step, error) =>
     fail('Gagal Menyimpan Data', `${step}: ${error.message}${error.code ? ` (kode ${error.code})` : ''}`);
 
-  const handleScanSubmit = async (e) => {
-    e.preventDefault();
-    const nisn = nisnInput.trim();
-    if (!nisn || loading) return;
+  // Satu pintu pemrosesan untuk: scanner USB/Bluetooth, ketik manual, kamera HP, dan foto barcode
+  const processNisn = async (rawNisn) => {
+    const nisn = String(rawNisn || '').trim();
+    if (!nisn || busyRef.current) return;
 
+    busyRef.current = true;
     setLoading(true);
-    setNisnInput('');
     clearTimeout(timerRef.current);
 
     try {
@@ -180,8 +184,74 @@ export default function ScanPage() {
     } catch (error) {
       fail('Terjadi Kesalahan', error?.message || 'Gagal terhubung ke database Supabase.');
     } finally {
+      busyRef.current = false;
       setLoading(false);
       timerRef.current = setTimeout(() => setFeedback(null), 5000);
+    }
+  };
+  processRef.current = processNisn;
+
+  const handleScanSubmit = (e) => {
+    e.preventDefault();
+    const nisn = nisnInput.trim();
+    setNisnInput('');
+    processNisn(nisn);
+  };
+
+  // Kamera HP: baca barcode langsung dari video (butuh HTTPS + izin kamera)
+  useEffect(() => {
+    cameraOnRef.current = cameraOn;
+    if (!cameraOn) return;
+    let scanner = null;
+    let cancelled = false;
+    let last = { code: '', t: 0 };
+
+    (async () => {
+      try {
+        const { Html5Qrcode, Html5QrcodeSupportedFormats: F } = await import('html5-qrcode');
+        if (cancelled) return;
+        scanner = new Html5Qrcode('qr-reader', {
+          formatsToSupport: [F.CODE_128, F.CODE_39, F.EAN_13, F.QR_CODE],
+          useBarCodeDetectorIfSupported: true,
+          verbose: false,
+        });
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 280, height: 130 } },
+          (text) => {
+            const now = Date.now();
+            if (text === last.code && now - last.t < 4000) return; // abaikan kode sama berulang
+            last = { code: text, t: now };
+            processRef.current && processRef.current(text);
+          },
+          () => {}
+        );
+      } catch (err) {
+        if (!cancelled) {
+          fail('Kamera Tidak Bisa Dibuka', 'Izinkan akses kamera di browser (alamat harus https). ' + (err?.message || ''));
+          setCameraOn(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (scanner) scanner.stop().then(() => scanner.clear()).catch(() => {});
+    };
+  }, [cameraOn]);
+
+  // Foto barcode dari galeri / kamera bawaan HP
+  const handlePhoto = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const { Html5Qrcode } = await import('html5-qrcode');
+      const reader = new Html5Qrcode('qr-file', { verbose: false });
+      const text = await reader.scanFile(file, false);
+      processNisn(text);
+    } catch (err) {
+      fail('Barcode Tidak Terbaca', 'Foto kurang jelas. Dekatkan kamera, pastikan barcode utuh dan terang, lalu coba lagi.', 'warning');
     }
   };
 
@@ -225,6 +295,9 @@ export default function ScanPage() {
           </button>
         </div>
 
+        {cameraOn ? (
+          <div id="qr-reader" className="w-full min-h-56 rounded-3xl overflow-hidden bg-slate-900 border-4 border-teal-400/50" />
+        ) : (
         <div className="relative w-full h-56 bg-slate-900 rounded-3xl overflow-hidden shadow-inner flex flex-col items-center justify-center border-4 border-teal-400/50">
           <ScanLine className="w-10 h-10 text-teal-400/40 mb-2" />
           <span className="text-slate-400 text-xs font-medium">
@@ -235,6 +308,26 @@ export default function ScanPage() {
             <div className="absolute w-full h-1 bg-red-500 shadow-[0_0_12px_#ef4444] animate-scan-laser"></div>
           </div>
         </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <button
+            type="button"
+            onClick={() => setCameraOn((v) => !v)}
+            className={`flex items-center justify-center gap-2 py-2.5 rounded-full text-xs font-bold transition-all ${
+              cameraOn ? 'bg-rose-500 text-white' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'
+            }`}
+          >
+            {cameraOn ? <CameraOff className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
+            <span>{cameraOn ? 'Matikan Kamera' : 'Scan dengan Kamera'}</span>
+          </button>
+          <label className="flex items-center justify-center gap-2 py-2.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer">
+            <ImagePlus className="w-4 h-4" />
+            <span>Foto Barcode</span>
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhoto} />
+          </label>
+        </div>
+        <div id="qr-file" className="hidden" />
 
         <form onSubmit={handleScanSubmit} className="mt-4">
           <input
@@ -242,7 +335,7 @@ export default function ScanPage() {
             type="text"
             value={nisnInput}
             onChange={(e) => setNisnInput(e.target.value)}
-            placeholder="Ketik NISN lalu tekan Enter untuk simulasi..."
+            placeholder="Scanner barcode mengisi otomatis di sini (atau ketik NISN + Enter)"
             className="w-full px-4 py-2.5 rounded-full bg-slate-100 border border-slate-200 text-center text-sm focus:outline-none focus:border-teal-500"
             autoFocus
           />

@@ -17,3 +17,9 @@ Aplikasi absensi siswa berbasis scan barcode NISN (Next.js, Tailwind CSS, Supaba
 - Tanggal dan jam kini dihitung dalam WITA (sebelumnya memakai UTC sehingga scan sebelum 08.00 WITA tercatat di tanggal kemarin).
 - Semua simpan/ubah data mengecek error dan menampilkan pesan dari Supabase (sebelumnya gagal tanpa pemberitahuan).
 - Rekap bulanan tidak lagi memakai tanggal 31 untuk semua bulan.
+
+## Cara scan
+- **Scanner barcode USB / Bluetooth:** otomatis. Scanner berperan seperti keyboard: mengetik NISN lalu menekan Enter ke kolom yang selalu fokus di halaman Scan Barcode.
+- **Kamera HP:** tombol "Scan dengan Kamera" (butuh HTTPS dan izin kamera).
+- **Foto barcode:** tombol "Foto Barcode" untuk memotret atau memilih gambar dari galeri.
+- Setelah menambah dependensi, jalankan `npm install` (Vercel melakukannya otomatis saat deploy).

@@ -5,11 +5,55 @@ import { todayWITA } from '../../lib/time';
 import AdminAuthModal from '../../components/AdminAuthModal';
 import { ClipboardCheck, DoorOpen, RotateCcw } from 'lucide-react';
 
+// Pilih kelas dulu, baru daftar siswa kelas tersebut muncul
+function StudentPicker({ classes, students, classId, setClassId, nisn, setNisn, focusClass }) {
+  const list = students.filter((st) => st.class_id === classId);
+  const base = `w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none ${focusClass}`;
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="block text-xs font-semibold text-slate-600 mb-1">1. Pilih Kelas</label>
+        <select
+          value={classId}
+          onChange={(e) => { setClassId(e.target.value); setNisn(''); }}
+          required
+          className={base}
+        >
+          <option value="">-- Pilih Kelas --</option>
+          {classes.map((c) => (
+            <option key={c.id} value={c.id}>{c.class_name}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-slate-600 mb-1">2. Pilih Siswa</label>
+        <select
+          value={nisn}
+          onChange={(e) => setNisn(e.target.value)}
+          required
+          disabled={!classId}
+          className={`${base} disabled:opacity-60`}
+        >
+          <option value="">
+            {!classId ? '-- Pilih kelas terlebih dahulu --' : list.length ? '-- Pilih Nama Siswa --' : 'Belum ada siswa di kelas ini'}
+          </option>
+          {list.map((st) => (
+            <option key={st.nisn} value={st.nisn}>{st.full_name} - {st.nisn}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 export default function IzinPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [students, setStudents] = useState([]);
   const [activeLeaves, setActiveLeaves] = useState([]);
 
+  const [classes, setClasses] = useState([]);
+  const [leaveClassId, setLeaveClassId] = useState('');
+  const [manualClassId, setManualClassId] = useState('');
   const [leaveNisn, setLeaveNisn] = useState('');
   const [leaveReason, setLeaveReason] = useState('');
   const [approvedBy, setApprovedBy] = useState('');
@@ -27,11 +71,18 @@ export default function IzinPage() {
   async function fetchData() {
     const { data: st, error: stErr } = await supabase
       .from('students')
-      .select('nisn, full_name, classes(class_name, major)')
+      .select('nisn, full_name, class_id, classes(class_name, major)')
       .eq('status', 'active')
       .order('full_name');
     if (stErr) alert('Gagal memuat siswa: ' + stErr.message);
     if (st) setStudents(st);
+
+    const { data: cls, error: clsErr } = await supabase.from('classes').select('*');
+    if (clsErr) alert('Gagal memuat kelas: ' + clsErr.message);
+    if (cls) {
+      const order = { X: 1, XI: 2, XII: 3 };
+      setClasses([...cls].sort((a, b) => (order[a.grade] || 9) - (order[b.grade] || 9) || a.class_name.localeCompare(b.class_name)));
+    }
 
     const { data: lv, error: lvErr } = await supabase
       .from('leave_logs')
@@ -164,22 +215,7 @@ export default function IzinPage() {
               </div>
 
               <form onSubmit={handleLeaveSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Pilih Siswa</label>
-                  <select
-                    value={leaveNisn}
-                    onChange={(e) => setLeaveNisn(e.target.value)}
-                    required
-                    className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="">-- Pilih Nama / NISN Siswa --</option>
-                    {students.map((s) => (
-                      <option key={s.nisn} value={s.nisn}>
-                        {s.full_name} ({s.classes ? `${s.classes.class_name} - ${s.classes.major}` : '-'}) - {s.nisn}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <StudentPicker classes={classes} students={students} classId={leaveClassId} setClassId={setLeaveClassId} nisn={leaveNisn} setNisn={setLeaveNisn} focusClass="focus:border-blue-500" />
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Jenis Izin Keluar</label>
@@ -249,22 +285,7 @@ export default function IzinPage() {
               </div>
 
               <form onSubmit={handleManualAttendance} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Pilih Siswa</label>
-                  <select
-                    value={manualNisn}
-                    onChange={(e) => setManualNisn(e.target.value)}
-                    required
-                    className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:border-teal-500"
-                  >
-                    <option value="">-- Pilih Nama / NISN Siswa --</option>
-                    {students.map((s) => (
-                      <option key={s.nisn} value={s.nisn}>
-                        {s.full_name} ({s.classes ? `${s.classes.class_name} - ${s.classes.major}` : '-'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <StudentPicker classes={classes} students={students} classId={manualClassId} setClassId={setManualClassId} nisn={manualNisn} setNisn={setManualNisn} focusClass="focus:border-teal-500" />
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
