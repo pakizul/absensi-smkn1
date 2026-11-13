@@ -48,25 +48,29 @@ export default function ScanPage() {
 
   // Satu pintu pemrosesan untuk: scanner USB/Bluetooth, ketik manual, kamera HP, dan foto barcode
   const processNisn = async (rawNisn) => {
-    const nisn = normalizeNisn(rawNisn);
-    if (!nisn || busyRef.current) return;
+    const code = String(rawNisn || '').trim().replace(/^'+/, '').replace(/[^A-Za-z0-9._-]/g, '');
+    if (!code || busyRef.current) return;
 
     busyRef.current = true;
     setLoading(true);
     clearTimeout(timerRef.current);
 
     try {
+      // Barcode boleh berisi NISN atau NIS. NISN yang kehilangan angka 0 di depan juga dicoba.
+      const candidates = [...new Set([code, normalizeNisn(code)])];
       const { data: student, error: studentErr } = await supabase
         .from('students')
         .select('*, classes(class_name, major)')
-        .eq('nisn', nisn)
+        .or(candidates.map((c) => `nisn.eq.${c},nis.eq.${c}`).join(','))
         .eq('status', 'active')
+        .limit(1)
         .maybeSingle();
 
       if (studentErr) return dbFail('Membaca data siswa', studentErr);
       if (!student) {
-        return fail('NISN Tidak Terdaftar', `Kode barcode (${nisn}) tidak ditemukan dalam database siswa.`);
+        return fail('Kode Tidak Terdaftar', `Kode barcode (${code}) tidak cocok dengan NISN maupun NIS siswa aktif.`);
       }
+      const nisn = student.nisn; // kunci resmi untuk absensi & izin
 
       const now = new Date();
       const t = wita(now); // tanggal & jam WITA

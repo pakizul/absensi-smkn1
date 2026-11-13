@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { normalizeNisn, normalizePhone } from '../../lib/nisn';
 import AdminAuthModal from '../../components/AdminAuthModal';
@@ -25,6 +25,50 @@ const DEFAULT_CLASSES = [
   { id: '630e012a-6837-4bac-a336-00556ee9e536', class_name: 'XII TKR 2', major: 'TKR', grade: 'XII' },
 ];
 
+// Barcode Code128 dibuat langsung di browser (tanpa layanan luar), jadi cepat dan bisa dicetak massal
+function Barcode({ value, height = 44, width = 1.8 }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    let off = false;
+    import('jsbarcode').then((m) => {
+      if (off || !ref.current) return;
+      try {
+        (m.default || m)(ref.current, String(value), { format: 'CODE128', height, width, displayValue: true, fontSize: 13, margin: 0 });
+      } catch (e) {}
+    });
+    return () => { off = true; };
+  }, [value, height, width]);
+  return <svg ref={ref} className="mx-auto max-w-full" />;
+}
+
+// Lembar cetak: 3 kolom per halaman A4
+function PrintSheet({ students, codeType, onClose }) {
+  return (
+    <div className="min-h-screen bg-white p-4 print:p-0">
+      <div className="no-print sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 py-3 mb-4 bg-white/95 border-b border-slate-100">
+        <div>
+          <p className="font-bold text-slate-900">Cetak Barcode {codeType === 'nis' ? 'NIS' : 'NISN'}</p>
+          <p className="text-xs text-slate-500">{students.length} kartu. Di dialog cetak pilih kertas A4, skala 100%.</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => window.print()} className="px-5 py-2.5 rounded-full bg-blue-600 text-white font-bold text-xs">Cetak Sekarang</button>
+          <button onClick={onClose} className="px-5 py-2.5 rounded-full bg-slate-100 text-slate-700 font-bold text-xs">Kembali</button>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 print:grid-cols-3 gap-3 print:gap-2">
+        {students.map((st) => (
+          <div key={st.nisn} className="border border-slate-300 rounded-xl p-3 text-center" style={{ breakInside: 'avoid' }}>
+            <p className="text-[9px] font-bold tracking-wide text-slate-500">SMKN 1 SIMPANG EMPAT</p>
+            <p className="font-bold text-xs leading-tight mt-1 truncate">{st.full_name}</p>
+            <p className="text-[10px] text-slate-500 mb-2">{st.classes ? st.classes.class_name : '-'}</p>
+            <Barcode value={codeType === 'nis' ? st.nis : st.nisn} height={34} width={1.5} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function MasterDataPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState('list'); // 'list' or 'add'
@@ -40,10 +84,26 @@ export default function MasterDataPage() {
   // Form Satuan Siswa
   const [nisn, setNisn] = useState('');
   const [fullName, setFullName] = useState('');
+  const [nis, setNis] = useState('');
   const [parentPhone, setParentPhone] = useState('');
   const [isEditing, setIsEditing] = useState(false);
 
   const [printStudent, setPrintStudent] = useState(null);
+  const [codeType, setCodeType] = useState('nisn'); // isi barcode: 'nisn' atau 'nis'
+  const [sheet, setSheet] = useState(null);        // daftar siswa yang akan dicetak massal
+
+  const codeOf = (st) => (codeType === 'nis' ? st.nis : st.nisn);
+  function openSheet(list) {
+    const usable = list.filter((st) => codeOf(st));
+    const skipped = list.length - usable.length;
+    if (!usable.length) {
+      alert(codeType === 'nis' ? 'Tidak ada siswa dengan NIS terisi pada pilihan ini.' : 'Tidak ada siswa yang bisa dicetak.');
+      return;
+    }
+    if (skipped) alert(`${skipped} siswa dilewati karena NIS belum diisi.`);
+    usable.sort((a, b) => (a.classes?.class_name || '').localeCompare(b.classes?.class_name || '') || a.full_name.localeCompare(b.full_name));
+    setSheet(usable);
+  }
 
   useEffect(() => {
     if (isAdmin) fetchMaster();
@@ -91,7 +151,8 @@ export default function MasterDataPage() {
   // Filter siswa berdasarkan tab aktif dan pencarian/kelas
   const displayedStudents = students.filter(st => {
     const matchSearch = (st.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        (st.nisn || '').toLowerCase().includes(searchQuery.toLowerCase());
+                        (st.nisn || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        (st.nis || '').toLowerCase().includes(searchQuery.toLowerCase());
     if (activeTab === 'list' && targetClassId) {
       return matchSearch && st.class_id === targetClassId;
     }
@@ -110,6 +171,7 @@ export default function MasterDataPage() {
       full_name: fullName.trim(),
       class_id: targetClassId,
       parent_phone: normalizePhone(parentPhone),
+      nis: nis.trim() || null,
       status: 'active',
     };
 
@@ -120,6 +182,7 @@ export default function MasterDataPage() {
           full_name: fullName.trim(),
           class_id: targetClassId,
           parent_phone: normalizePhone(parentPhone),
+          nis: nis.trim() || null,
         })
         .eq('nisn', normalizeNisn(nisn));
       if (error) {
@@ -144,6 +207,7 @@ export default function MasterDataPage() {
   function handleEditStudent(st) {
     setNisn(st.nisn);
     setFullName(st.full_name);
+    setNis(st.nis || '');
     if (st.classes?.major) setSelectedMajorFilter(st.classes.major);
     if (st.classes?.grade) setSelectedGradeFilter(st.classes.grade);
     else if (st.classes?.class_name) {
@@ -170,13 +234,14 @@ export default function MasterDataPage() {
   function resetStudentForm() {
     setNisn('');
     setFullName('');
+    setNis('');
     setParentPhone('');
     setIsEditing(false);
   }
 
   function downloadTemplate() {
     const templateData = [
-      { NISN: "0123456789", "Nama Lengkap": "Contoh Siswa", "No. HP Orang Tua": "081234567890" }
+      { NISN: "0123456789", NIS: "12345", "Nama Lengkap": "Contoh Siswa", "No. HP Orang Tua": "081234567890" }
     ];
     const worksheet = XLSX.utils.json_to_sheet(templateData);
     const workbook = XLSX.utils.book_new();
@@ -203,11 +268,13 @@ export default function MasterDataPage() {
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' }); // raw:false = ambil teks apa adanya (angka 0 di depan tetap)
 
+        const hasNis = data.some((r) => 'NIS' in r || 'nis' in r || 'Nis' in r); // jangan hapus NIS lama bila file tidak punya kolom NIS
         const payload = data.map((row) => ({
           nisn: normalizeNisn(row['NISN'] || row['nisn'] || row['Nisn'] || ''),
           full_name: String(row['Nama Lengkap'] || row['nama lengkap'] || row['Nama'] || row['nama'] || '').trim(),
           class_id: targetClassId,
           parent_phone: normalizePhone(row['No. HP Orang Tua'] || row['no hp orang tua'] || row['Telepon'] || row['telepon'] || ''),
+          ...(hasNis ? { nis: String(row['NIS'] ?? row['nis'] ?? row['Nis'] ?? '').trim() || null } : {}),
           status: 'active',
         })).filter(r => r.nisn && r.full_name);
 
@@ -230,6 +297,8 @@ export default function MasterDataPage() {
     };
     reader.readAsBinaryString(file);
   }
+
+  if (sheet) return <PrintSheet students={sheet} codeType={codeType} onClose={() => setSheet(null)} />;
 
   return (
     <>
@@ -327,11 +396,46 @@ export default function MasterDataPage() {
                   <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Cari nama atau NISN..."
+                    placeholder="Cari nama, NISN, atau NIS..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 rounded-full bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-blue-500"
                   />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 mb-5 p-3 bg-slate-50 rounded-2xl">
+                <span className="text-xs font-bold text-slate-600">Isi barcode:</span>
+                <div className="flex bg-white p-1 rounded-full border border-slate-200">
+                  {['nisn', 'nis'].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setCodeType(t)}
+                      className={`px-4 py-1.5 rounded-full text-xs font-bold ${codeType === t ? 'bg-blue-600 text-white' : 'text-slate-600'}`}
+                    >
+                      {t.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2 sm:ml-auto">
+                  <button
+                    type="button"
+                    disabled={!targetClassId}
+                    onClick={() => openSheet(students.filter((st) => st.class_id === targetClassId))}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-teal-50 text-teal-700 hover:bg-teal-100 text-xs font-bold disabled:opacity-50"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Cetak Barcode Kelas Ini</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openSheet(students)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-600 text-white hover:opacity-95 text-xs font-bold"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Cetak Semua Siswa</span>
+                  </button>
                 </div>
               </div>
 
@@ -340,6 +444,7 @@ export default function MasterDataPage() {
                   <thead>
                     <tr className="border-b border-slate-100 text-xs text-slate-400">
                       <th className="py-3 px-3">NISN</th>
+                      <th className="py-3 px-3">NIS</th>
                       <th className="py-3 px-3">Nama Lengkap</th>
                       <th className="py-3 px-3">Kelas & Jurusan</th>
                       <th className="py-3 px-3">No. HP Orang Tua</th>
@@ -349,7 +454,7 @@ export default function MasterDataPage() {
                   <tbody className="text-sm divide-y divide-slate-50">
                     {displayedStudents.length === 0 ? (
                       <tr>
-                        <td colSpan="5" className="py-12 text-center text-xs text-slate-400">
+                        <td colSpan="6" className="py-12 text-center text-xs text-slate-400">
                           Tidak ada data siswa yang ditemukan pada kelas atau pencarian ini.
                         </td>
                       </tr>
@@ -357,6 +462,7 @@ export default function MasterDataPage() {
                       displayedStudents.map((st) => (
                         <tr key={st.nisn} className="hover:bg-slate-50">
                           <td className="py-3.5 px-3 font-mono text-xs font-bold text-slate-600">{st.nisn}</td>
+                          <td className="py-3.5 px-3 font-mono text-xs text-slate-600">{st.nis || '-'}</td>
                           <td className="py-3.5 px-3 font-semibold text-slate-900">{st.full_name}</td>
                           <td className="py-3.5 px-3 text-xs">
                             <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-bold">
@@ -367,7 +473,7 @@ export default function MasterDataPage() {
                           <td className="py-3.5 px-3 flex justify-end items-center gap-2 relative">
                             <button
                               onClick={() => setPrintStudent(st)}
-                              title="Lihat / Cetak Barcode NISN"
+                              title="Lihat / Cetak Barcode"
                               className="p-2 text-teal-600 hover:bg-teal-50 rounded-full transition-colors"
                             >
                               <Printer className="w-4 h-4" />
@@ -443,7 +549,7 @@ export default function MasterDataPage() {
                   </div>
                 )}
 
-                <form onSubmit={handleSaveStudent} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <form onSubmit={handleSaveStudent} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">NISN (Kode Barcode)</label>
                     <input
@@ -454,6 +560,16 @@ export default function MasterDataPage() {
                       disabled={isEditing}
                       required
                       className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm disabled:opacity-60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">NIS (opsional)</label>
+                    <input
+                      type="text"
+                      placeholder="Nomor Induk Siswa..."
+                      value={nis}
+                      onChange={(e) => setNis(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-full bg-slate-50 border border-slate-200 text-sm"
                     />
                   </div>
                   <div>
@@ -478,7 +594,7 @@ export default function MasterDataPage() {
                     />
                   </div>
 
-                  <div className="sm:col-span-3 flex gap-2 mt-2">
+                  <div className="sm:col-span-2 lg:col-span-4 flex gap-2 mt-2">
                     <button
                       type="submit"
                       disabled={!targetClassId}
@@ -512,16 +628,16 @@ export default function MasterDataPage() {
                     <p className="text-xs text-slate-500 mb-3">
                       {printStudent.classes ? `${printStudent.classes.class_name} (${printStudent.classes.major})` : '-'}
                     </p>
-                    <img
-                      src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${printStudent.nisn}&scale=2&height=10&includetext`}
-                      alt={`Barcode ${printStudent.nisn}`}
-                      className="mx-auto"
-                    />
+                    {codeOf(printStudent) ? (
+                      <Barcode value={codeOf(printStudent)} />
+                    ) : (
+                      <p className="text-xs text-rose-600">NIS siswa ini belum diisi.</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2 mt-4 no-print">
                   <button
-                    onClick={() => window.print()}
+                    onClick={() => { const st = printStudent; setPrintStudent(null); openSheet([st]); }}
                     className="flex-1 py-2.5 rounded-full bg-blue-600 text-white font-bold text-xs"
                   >
                     Cetak Kartu
@@ -530,7 +646,7 @@ export default function MasterDataPage() {
                     onClick={() => setPrintStudent(null)}
                     className="flex-1 py-2.5 rounded-full bg-slate-100 text-slate-700 font-bold text-xs"
                   >
-                    Tutup,
+                    Tutup
                   </button>
                 </div>
               </div>

@@ -27,6 +27,7 @@ create table if not exists public.classes (
 -- nisn = isi barcode Code128 = kunci utama (dipakai upsert onConflict:'nisn')
 create table if not exists public.students (
   nisn          text primary key,
+  nis           text,                                     -- opsional, bisa dipakai sebagai isi barcode
   full_name     text not null,
   class_id      uuid references public.classes(id) on update cascade on delete set null,
   parent_phone  text,
@@ -36,6 +37,9 @@ create table if not exists public.students (
 );
 create index if not exists students_class_idx  on public.students(class_id);
 create index if not exists students_status_idx on public.students(status);
+-- Untuk database yang sudah dibuat dengan skema lama: tambahkan kolom NIS
+alter table public.students add column if not exists nis text;
+create unique index if not exists students_nis_key on public.students(nis) where nis is not null and nis <> '';
 
 -- 3. ABSENSI HARIAN (1 baris per siswa per tanggal) --------------------
 create table if not exists public.attendance (

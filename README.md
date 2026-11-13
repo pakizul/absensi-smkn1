@@ -23,3 +23,8 @@ Aplikasi absensi siswa berbasis scan barcode NISN (Next.js, Tailwind CSS, Supaba
 - **Kamera HP:** tombol "Scan dengan Kamera" (butuh HTTPS dan izin kamera).
 - **Foto barcode:** tombol "Foto Barcode" untuk memotret atau memilih gambar dari galeri.
 - Setelah menambah dependensi, jalankan `npm install` (Vercel melakukannya otomatis saat deploy).
+
+## Cetak barcode
+Menu Data Siswa > Daftar Siswa: pilih isi barcode **NISN** atau **NIS**, lalu "Cetak Barcode Kelas Ini" atau "Cetak Semua Siswa" (3 kolom per halaman A4).
+Kolom NIS bersifat opsional dan harus diisi dulu agar bisa dicetak. Scan menerima kode NISN maupun NIS.
+Jalankan ulang `supabase/schema.sql` agar kolom `nis` ditambahkan (data tidak terhapus selama blok RESET tetap dikomentari).
